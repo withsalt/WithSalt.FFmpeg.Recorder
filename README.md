@@ -31,12 +31,12 @@ dotnet add package WithSalt.FFmpeg.Recorder
 ```
 
 ### 安装FFmpeg  
-Windows系统下，可前往 https://github.com/BtbN/FFmpeg-Builds/releases 下载编译好的FFmpeg。然后将ffmpeg.exe放入应用程序更目录，或者按照源代码中的搜索逻辑，放入支持自动检索的目录。  
+Windows系统下，可前往 https://github.com/BtbN/FFmpeg-Builds/releases 下载编译好的FFmpeg。然后将ffmpeg.exe放入应用程序根目录，或者按照源代码中的搜索逻辑，放入支持自动检索的目录。  
 Linux系统下，通过命令：`sudo apt install ffmpeg`安装。  
+可以参考项目中Demo示例中ffmpeg路径。  
 
 ### 加载FFmpeg
-工欲善其事必先利其器。在调用任何API之前，让我们先告诉程序ffmpeg所在目录，以及进行一些基础配置。  
-调用：  
+工欲善其事必先利其器。在调用任何库提供的API之前，让我们先告诉程序ffmpeg所在目录，以及进行一些基础配置。  
 ```
 //使用默认的ffmpeg加载器
 FFmpegHelper.SetDefaultFFmpegLoador();
@@ -46,12 +46,12 @@ FFmpegHelper.SetDefaultFFmpegLoador();
 - 包含开发环境（源目录），如：.\ffmpeg.exe  
 - 生产环境的路径配置，如：.\bin\ffmpeg.exe  
 
-当以上路径均找不到时，查找环境变量Path中的逻辑。所有路径均找不到后，抛出异常。  
+当以上路径均找不到时，查找环境变量Path中的逻辑。所有路径均找不到ffmpeg应用程序后，抛出异常。  
 
 ### 构建FFmpeg执行参数  
 如果进行桌面录制  
 ```
-FFMpegArgumentProcessor ffmpegCmd = new WithSalt.FFmpeg.Recorder.FFmpegArgumentsBuilder()
+FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
     .WithDesktopInput()
     .WithRectangle(new SKRect(0, 0, 1920, 1080))
     .WithFramerate(60)
@@ -216,7 +216,7 @@ namespace ConsoleAppDemo
 ```  
 
 ### 更多完整示例  
-https://github.com/withsalt/BemfaCloud/tree/main/src/Examples
+[https://github.com/withsalt/BemfaCloud/tree/main/src/Examples](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos)
 
 ## 致谢
 感谢这些伟大的开源项目。  

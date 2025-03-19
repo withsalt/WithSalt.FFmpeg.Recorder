@@ -122,6 +122,14 @@
                                  IsVisible="{Binding IsShowRtspSource}"
                                  IsEnabled="{Binding !IsRunning}"/>
 
+						<!-- RTSP源设置 -->
+						<TextBlock Margin="0,8,0,2" IsVisible="{Binding IsShowDesktopSource}">录制范围</TextBlock>
+						<TextBlock Margin="0,0,0,8" IsVisible="{Binding IsShowDesktopSource}" Foreground="#FF808080" FontSize="12" FontStyle="">格式：x,y,width,height，如：0,0。w和h可为空</TextBlock>
+						<TextBox Text="{Binding DesktopSource}"
+								 HorizontalAlignment="Stretch"
+                                 IsVisible="{Binding IsShowDesktopSource}"
+                                 IsEnabled="{Binding !IsRunning}"/>
+
 						<!-- 预览分辨率设置 -->
 						<TextBlock Margin="0,8,0,8">输出分辨率</TextBlock>
 						<ComboBox Name="OutputResolutions"

@@ -214,8 +214,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
             long frameIndex = 0;
 
-            const int initialSlidingBufferSize = 512 * 1024;
-            byte[] slidingBuffer = ArrayPool<byte>.Shared.Rent(initialSlidingBufferSize);
+            byte[] slidingBuffer = ArrayPool<byte>.Shared.Rent(1024 * 512);
             int slidingCount = 0;
             int slidingStart = 0;
 
@@ -238,12 +237,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
                         ArrayPool<byte>.Shared.Return(slidingBuffer);
                         slidingBuffer = newBuffer;
-                    }
-                    else if (slidingStart > 0 && slidingStart > slidingBuffer.Length / 4 && slidingCount + bytesRead > slidingBuffer.Length * 3 / 4)
-                    {
-                        Buffer.BlockCopy(slidingBuffer, slidingStart, slidingBuffer, 0, slidingCount - slidingStart);
-                        slidingCount -= slidingStart;
-                        slidingStart = 0;
                     }
 
                     Buffer.BlockCopy(buffer, 0, slidingBuffer, slidingCount, bytesRead);
@@ -274,7 +267,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                             try
                             {
                                 using MemoryStream stream = new MemoryStream(slidingBuffer, soi, jpgLength, writable: false);
-                                SKBitmap bitmap = SKBitmap.Decode(slidingBuffer);
+                                SKBitmap bitmap = SKBitmap.Decode(stream);
                                 if (bitmap != null)
                                 {
                                     if (bitmap.ColorType == SKColorType.Bgra8888)
@@ -326,18 +319,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                             {
                                 slidingStart = searchStart;
                             }
-                        }
-                    }
-                    else if (slidingCount > slidingBuffer.Length * 0.9)
-                    {
-                        // 如果缓冲区接近满但没找到完整的JPEG，可能是数据损坏
-                        // 移动最后一部分数据到开头以便继续搜索
-                        const int preserveBytes = 1024; // 保留后面一部分数据以防SOI被分割
-                        if (slidingCount > preserveBytes)
-                        {
-                            Buffer.BlockCopy(slidingBuffer, slidingCount - preserveBytes, slidingBuffer, 0, preserveBytes);
-                            slidingCount = preserveBytes;
-                            slidingStart = 0;
                         }
                     }
                 }

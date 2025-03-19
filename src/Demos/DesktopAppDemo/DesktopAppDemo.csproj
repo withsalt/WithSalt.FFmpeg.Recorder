@@ -37,4 +37,13 @@
 	<ItemGroup>
 	  <ProjectReference Include="..\..\WithSalt.FFmpeg.Recorder\WithSalt.FFmpeg.Recorder.csproj" />
 	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="nlog.config">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="runtimes\win-x64\bin\ffmpeg.exe">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
 </Project>

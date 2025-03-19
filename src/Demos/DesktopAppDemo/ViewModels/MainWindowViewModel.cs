@@ -72,7 +72,7 @@ namespace DesktopAppDemo.ViewModels
 
         public ObservableCollection<string> OutputResolutions { get; } = new ObservableCollection<string>()
         {
-            "2560x1440", "1920x1080", "1280x720", "960x540", "640x360", "320x180"
+            "3840x2160", "2560x1440", "1920x1080", "1280x720", "960x540", "640x360", "320x180"
         };
 
         public ObservableCollection<OutputQuality> OutputQualities { get; } = new ObservableCollection<OutputQuality>()
@@ -111,6 +111,7 @@ namespace DesktopAppDemo.ViewModels
                         {
                             IsShowRtspSource = false;
                             IsShowCamera = true;
+                            IsShowDesktopSource = false;
 
                             InitCameraDeviceList();
                         }
@@ -119,18 +120,21 @@ namespace DesktopAppDemo.ViewModels
                         {
                             IsShowCamera = false;
                             IsShowRtspSource = true;
+                            IsShowDesktopSource = false;
                         }
                         break;
-                    case 3: 
+                    case 3:
+                        {
+                            IsShowCamera = false;
+                            IsShowRtspSource = false;
+                            IsShowDesktopSource = true;
+                        }
+                        break;
+                    case 4:
                         {
                             IsShowCamera = false;
                             IsShowRtspSource = true;
-                        }
-                        break;
-                    case 4: 
-                        {
-                            IsShowCamera = false;
-                            IsShowRtspSource = true;
+                            IsShowDesktopSource = false;
                         }
                         break;
                     default:
@@ -179,6 +183,8 @@ namespace DesktopAppDemo.ViewModels
             set => SetProperty(ref _isRunning, value);
         }
 
+        #region Camera
+
         private bool _isShowCamera = false;
 
         public bool IsShowCamera
@@ -186,6 +192,10 @@ namespace DesktopAppDemo.ViewModels
             get => _isShowCamera;
             set => SetProperty(ref _isShowCamera, value);
         }
+
+        #endregion
+
+        #region RTSP
 
         private bool _isShowRtspSource = false;
 
@@ -202,6 +212,28 @@ namespace DesktopAppDemo.ViewModels
             get => _rtspSource;
             set => this.SetProperty(ref _rtspSource, value);
         }
+
+        #endregion
+
+        #region Desktop
+
+        private bool _isShowDesktopSource = false;
+
+        public bool IsShowDesktopSource
+        {
+            get => _isShowDesktopSource;
+            set => SetProperty(ref _isShowDesktopSource, value);
+        }
+
+        private string _desktopSource = "0,0";
+
+        public string DesktopSource
+        {
+            get => _desktopSource;
+            set => this.SetProperty(ref _desktopSource, value);
+        }
+
+        #endregion
 
         private string _btnName = string.Empty;
 
@@ -347,6 +379,7 @@ namespace DesktopAppDemo.ViewModels
                 {
                     1 => BuildCameraProcessor(),
                     2 => BuildRtspProcessor(),
+                    3 => BuildDesktopProcessor(),
                     _ => throw new InvalidOperationException("未知输入类型")
                 };
 
@@ -603,7 +636,7 @@ namespace DesktopAppDemo.ViewModels
                 .WithVideoSize((uint)Characteristics!.Width, (uint)Characteristics.Height)
                 .WithFramerate((uint)Characteristics.FramesPerSecond.Numerator)
                 .WithImageHandle(OnImageArrived)
-                .WithOutputQuality(OutputQuality.High)
+                .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                 .WithOutputSize(width, height)
                 .Build()
                 .CancellableThrough(out _cancel);
@@ -618,7 +651,28 @@ namespace DesktopAppDemo.ViewModels
                 .WithRstpInput()
                 .WithUri(RtspSource)
                 .WithImageHandle(OnImageArrived)
-                .WithOutputQuality(OutputQuality.High)
+                .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
+                .WithOutputSize(width, height)
+                .Build()
+                .CancellableThrough(out _cancel);
+            return args;
+        }
+
+        private FFMpegArgumentProcessor BuildDesktopProcessor()
+        {
+            if (!ScreenParamsHelper.TryParse(this.DesktopSource, out var message, out var rectangle) || rectangle == null)
+            {
+                throw new ArgumentException(message);
+            }
+
+            (int width, int height) = ParseResolution();
+
+            FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                .WithDesktopInput()
+                .WithRectangle(new SKRect(rectangle.Value.X, rectangle.Value.Y, rectangle.Value.Width, rectangle.Value.Height))
+                .WithFramerate(60)
+                .WithImageHandle(OnImageArrived)
+                .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                 .WithOutputSize(width, height)
                 .Build()
                 .CancellableThrough(out _cancel);

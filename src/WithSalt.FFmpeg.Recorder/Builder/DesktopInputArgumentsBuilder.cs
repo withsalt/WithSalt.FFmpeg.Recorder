@@ -39,9 +39,9 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             {
                 _inputArgumentList.Add(new CustomArgument($"-offset_x {rectangle.Left}"));
                 _inputArgumentList.Add(new CustomArgument($"-offset_y {rectangle.Top}"));
-                if (rectangle.Width > 0 && rectangle.Height > 0)
+                if (rectangle.Right > 0 && rectangle.Bottom > 0)
                 {
-                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Width}x{rectangle.Height}"));
+                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Right}x{rectangle.Bottom}"));
                 }
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))

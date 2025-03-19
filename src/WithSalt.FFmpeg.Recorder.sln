@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35728.132
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WithSalt.FFmpeg.Recorder", "WithSalt.FFmpeg.Recorder\WithSalt.FFmpeg.Recorder.csproj", "{76248CB8-C42B-42CD-AC6D-2F839B941F5A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Demos", "Demos", "{C02246F8-00E2-4687-8AC2-7758874075C3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleAppDemo", "Demos\ConsoleAppDemo\ConsoleAppDemo.csproj", "{B3DE4273-23D2-4CE0-B0F5-E51357E305FF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DesktopAppDemo", "Demos\DesktopAppDemo\DesktopAppDemo.csproj", "{B9FDBF14-23CE-49A7-9D6A-5369D6C342A4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{76248CB8-C42B-42CD-AC6D-2F839B941F5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76248CB8-C42B-42CD-AC6D-2F839B941F5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76248CB8-C42B-42CD-AC6D-2F839B941F5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76248CB8-C42B-42CD-AC6D-2F839B941F5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3DE4273-23D2-4CE0-B0F5-E51357E305FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3DE4273-23D2-4CE0-B0F5-E51357E305FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3DE4273-23D2-4CE0-B0F5-E51357E305FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3DE4273-23D2-4CE0-B0F5-E51357E305FF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9FDBF14-23CE-49A7-9D6A-5369D6C342A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9FDBF14-23CE-49A7-9D6A-5369D6C342A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9FDBF14-23CE-49A7-9D6A-5369D6C342A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9FDBF14-23CE-49A7-9D6A-5369D6C342A4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B3DE4273-23D2-4CE0-B0F5-E51357E305FF} = {C02246F8-00E2-4687-8AC2-7758874075C3}
+		{B9FDBF14-23CE-49A7-9D6A-5369D6C342A4} = {C02246F8-00E2-4687-8AC2-7758874075C3}
+	EndGlobalSection
+EndGlobal

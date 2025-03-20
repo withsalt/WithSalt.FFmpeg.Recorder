@@ -724,6 +724,7 @@ namespace DesktopAppDemo.ViewModels
             FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
                 .WithRstpInput()
                 .WithUri(RtspSource)
+                .WithTimeout(3)
                 .WithImageHandle(OnImageArrived)
                 .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                 .WithOutputSize(width, height)

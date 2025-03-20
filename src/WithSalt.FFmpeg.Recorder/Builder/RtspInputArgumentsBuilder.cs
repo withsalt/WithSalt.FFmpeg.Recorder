@@ -70,6 +70,15 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             return this;
         }
 
+        public IRtspInputArgumentsBuilder WithTimeout(uint timeout = 3)
+        {
+            if (timeout == 0)
+                return this;
+
+            _inputArgumentList.Add(new CustomArgument($"-timeout {timeout * 1000000}"));
+            return this;
+        }
+
         public override FFMpegArgumentProcessor Build()
         {
             if (_uri == null)

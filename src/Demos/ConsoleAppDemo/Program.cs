@@ -93,8 +93,8 @@ namespace ConsoleAppDemo
 
             //await FilesTest(frameChannel);
             //await CameraTest(frameChannel);
-            //await RtspTest(frameChannel);
-            await DesktopTest(frameChannel);
+            await RtspTest(frameChannel);
+            //await DesktopTest(frameChannel);
 
             Console.WriteLine("Done.");
         }
@@ -159,6 +159,7 @@ namespace ConsoleAppDemo
                 .WithRstpInput()
                 .WithUri("rtsp://admin:admin123.@192.168.188.66:554/stream1")
                 //.WithUdp()
+                .WithTimeout(3)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
                     if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))

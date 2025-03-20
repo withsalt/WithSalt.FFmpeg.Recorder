@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using FFMpegCore;
 using FFMpegCore.Arguments;
-using FFMpegCore.Enums;
 using FFMpegCore.Pipes;
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder.Interface;

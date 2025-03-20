@@ -2,11 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
-using SkiaSharp;
 using WithSalt.FFmpeg.Recorder.Interface;
 
 namespace WithSalt.FFmpeg.Recorder.Builder

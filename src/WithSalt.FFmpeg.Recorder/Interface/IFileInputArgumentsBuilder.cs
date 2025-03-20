@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using SkiaSharp;
 
 namespace WithSalt.FFmpeg.Recorder.Interface
 {

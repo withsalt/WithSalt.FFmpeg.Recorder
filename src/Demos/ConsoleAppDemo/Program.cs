@@ -5,7 +5,6 @@ using FFMpegCore;
 using FlashCap;
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder;
-using WithSalt.FFmpeg.Recorder.Interface;
 using WithSalt.FFmpeg.Recorder.Models;
 
 namespace ConsoleAppDemo

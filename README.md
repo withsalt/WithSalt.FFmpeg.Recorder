@@ -16,14 +16,11 @@
 | Windows  | .NET Core 3.1+  |  √  |  √  |     |      |      |
 | Linux    | .NET Core 3.1+  |     |  √  |  √  |  √   |  √   |
 
-## 性能
-CPU为Intel i7 12700K，不使用硬件加速，输出质量控制为中等，进行屏幕录制。可跑满60帧。  
-树莓派5B，不使用硬件加速，输出质量控制为中等，本地视频处理。可跑满60帧。  
 
 ## 快速开始  
 
 ### 安装Nuget包
-通过Nuget包管理器安装`WithSalt.FFmpeg.Recorder` [![NuGet Version](https://img.shields.io/nuget/v/BemfaCloud.svg?style=flat)](https://www.nuget.org/packages/BemfaCloud/)   
+通过Nuget包管理器安装`WithSalt.FFmpeg.Recorder` [![NuGet Version](https://img.shields.io/nuget/v/WithSalt.FFmpeg.Recorder.svg?style=flat)](https://www.nuget.org/packages/WithSalt.FFmpeg.Recorder/)   
 或  
 通过Terminal安装：  
 ```shell

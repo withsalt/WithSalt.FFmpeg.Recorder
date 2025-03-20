@@ -19,6 +19,8 @@ namespace ConsoleAppDemo
             }
             Directory.CreateDirectory("output");
 
+            //在LoongArch64架构上面，需要加载SkiaSharp的本地库（其他架构不用）
+            LoongArch64RuntimeNativeLoader.Load();
             //使用默认的ffmpeg加载器
             FFmpegHelper.SetDefaultFFmpegLoador();
 
@@ -126,8 +128,8 @@ namespace ConsoleAppDemo
         {
             FFMpegArgumentProcessor ffmpegCmd = new WithSalt.FFmpeg.Recorder.FFmpegArgumentsBuilder()
                 .WithDesktopInput()
-                .WithRectangle(new SKRect(0, 0, 1920, 1080))
-                .WithFramerate(120)
+                .WithRectangle(new SKRect(0, 0, 1280, 720))
+                .WithFramerate(60)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
                     if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))

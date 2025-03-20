@@ -370,7 +370,7 @@ namespace DesktopAppDemo.ViewModels
             }
             else
             {
-                this.SelectedFilePath = string.Join(';', rt.Select(s => s.Path.AbsolutePath));
+                this.SelectedFilePath = string.Join(';', rt.Select(s => s.Path.LocalPath));
             }
         }
 

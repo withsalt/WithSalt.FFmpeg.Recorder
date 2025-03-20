@@ -9,12 +9,15 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using DesktopAppDemo.Models;
 using DesktopAppDemo.Utils;
+using DesktopAppDemo.Views;
 using FFMpegCore;
 using FlashCap;
 using Microsoft.Extensions.Logging;
@@ -39,6 +42,7 @@ namespace DesktopAppDemo.ViewModels
         private int _uiFrameCount = 0;
         private readonly Stopwatch _lastUiFpsUpdate = Stopwatch.StartNew();
         private int _currentUiFps = 0;
+        //限制UI更新频率
         private static readonly int _limitFpsTime = 1000 / 60;
 
         private readonly Channel<SKBitmap> _frameChannel = Channel.CreateBounded<SKBitmap>(
@@ -46,9 +50,6 @@ namespace DesktopAppDemo.ViewModels
             {
                 FullMode = BoundedChannelFullMode.Wait
             });
-
-        private DateTime _lastImageUpdate = DateTime.MinValue;
-        private readonly object _imageSync = new();
 
         private SKTypeface SKTypeface { get; }
 
@@ -107,11 +108,13 @@ namespace DesktopAppDemo.ViewModels
             {
                 switch (value?.Id)
                 {
+                    default:
                     case 1: //摄像头
                         {
                             IsShowRtspSource = false;
                             IsShowCamera = true;
                             IsShowDesktopSource = false;
+                            IsShowFilesSource = false;
 
                             InitCameraDeviceList();
                         }
@@ -121,6 +124,7 @@ namespace DesktopAppDemo.ViewModels
                             IsShowCamera = false;
                             IsShowRtspSource = true;
                             IsShowDesktopSource = false;
+                            IsShowFilesSource = false;
                         }
                         break;
                     case 3:
@@ -128,19 +132,15 @@ namespace DesktopAppDemo.ViewModels
                             IsShowCamera = false;
                             IsShowRtspSource = false;
                             IsShowDesktopSource = true;
+                            IsShowFilesSource = false;
                         }
                         break;
                     case 4:
                         {
                             IsShowCamera = false;
-                            IsShowRtspSource = true;
-                            IsShowDesktopSource = false;
-                        }
-                        break;
-                    default:
-                        {
-                            IsShowCamera = false;
                             IsShowRtspSource = false;
+                            IsShowDesktopSource = false;
+                            IsShowFilesSource = true;
                         }
                         break;
                 }
@@ -148,6 +148,16 @@ namespace DesktopAppDemo.ViewModels
                 this.SetProperty(ref _inputType, value);
             }
         }
+
+        private bool _isRunning = false;
+
+        public bool IsRunning
+        {
+            get => _isRunning;
+            set => SetProperty(ref _isRunning, value);
+        }
+
+        #region Camera
 
         public ObservableCollection<CaptureDeviceDescriptor?> CameraDeviceList { get; } =
             new ObservableCollection<CaptureDeviceDescriptor?>();
@@ -174,16 +184,6 @@ namespace DesktopAppDemo.ViewModels
             get => this._characteristics;
             set => this.SetProperty(ref _characteristics, value);
         }
-
-        private bool _isRunning = false;
-
-        public bool IsRunning
-        {
-            get => _isRunning;
-            set => SetProperty(ref _isRunning, value);
-        }
-
-        #region Camera
 
         private bool _isShowCamera = false;
 
@@ -235,6 +235,25 @@ namespace DesktopAppDemo.ViewModels
 
         #endregion
 
+        #region Files
+
+        private bool _isShowFilesSource = false;
+
+        public bool IsShowFilesSource
+        {
+            get => _isShowFilesSource;
+            set => SetProperty(ref _isShowFilesSource, value);
+        }
+
+        private string _selectedFilePath = string.Empty;
+        public string SelectedFilePath
+        {
+            get => _selectedFilePath;
+            set => this.SetProperty(ref _selectedFilePath, value);
+        }
+
+        #endregion
+
         private string _btnName = string.Empty;
 
         public string BtnName
@@ -257,6 +276,15 @@ namespace DesktopAppDemo.ViewModels
         {
             get => _tips;
             set => this.SetProperty(ref _tips, value);
+        }
+
+        private MainWindow MainWindow
+        {
+            get
+            {
+                return (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as MainWindow
+                                            ?? throw new InvalidOperationException();
+            }
         }
 
         #endregion
@@ -300,17 +328,50 @@ namespace DesktopAppDemo.ViewModels
             LogManager.Shutdown();
         }
 
+        private async Task ResetUIStateAsync()
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                ResetUIState();
+            });
+        }
+
         private void ResetUIState()
         {
-            BtnName = "开启";
-            Tips = "待命中...";
-            BtnBackgroundColor = Brushes.GreenYellow;
-            IsRunning = false;
+            this.Tips = "待命中...";
+            this.BtnName = "开启";
+            this.BtnBackgroundColor = Brushes.GreenYellow;
+            this.IsRunning = false;
 
-            if (this.Image != null)
+            if (Image != null)
             {
-                this.Image.Dispose();
-                this.Image = null;
+                Image.Dispose();
+                Image = null;
+            }
+        }
+
+        public async Task SelectFiles()
+        {
+            var storage = this.MainWindow.StorageProvider;
+            var rt = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "选择视频文件",
+                AllowMultiple = true,
+                FileTypeFilter = new List<FilePickerFileType>()
+                {
+                    new FilePickerFileType("视频文件")
+                    {
+                        Patterns = new List<string>() { "*.mp4", "*.avi", "*.mov", "*.mkv", "*.flv", "*.wmv", "*.webm" }
+                    }
+                },
+            });
+            if (rt.Count == 0)
+            {
+                return;
+            }
+            else
+            {
+                this.SelectedFilePath = string.Join(';', rt.Select(s => s.Path.AbsolutePath));
             }
         }
 
@@ -380,6 +441,7 @@ namespace DesktopAppDemo.ViewModels
                     1 => BuildCameraProcessor(),
                     2 => BuildRtspProcessor(),
                     3 => BuildDesktopProcessor(),
+                    4 => BuildFilesProcessor(),
                     _ => throw new InvalidOperationException("未知输入类型")
                 };
 
@@ -401,7 +463,10 @@ namespace DesktopAppDemo.ViewModels
 
                 // 启动任务
                 _frameConsumerTask = ConsumeFramesAsync(_cts.Token);
-                _mainTask = ProcessFFMpegAsync(_cts.Token);
+                _mainTask = ProcessFFMpegAsync(_cts.Token).ContinueWith(async (t) =>
+                {
+                    await ResetUIStateAsync();
+                });
 
                 // 检查是否立即失败
                 await Task.WhenAny(_mainTask, Task.Delay(500, _cts.Token)).ConfigureAwait(false);
@@ -424,7 +489,7 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
-        private async Task StopRecord(bool isClosing = false)
+        private async Task StopRecord(bool isClosing = false, bool isMainTaskEnd = false)
         {
             try
             {
@@ -437,7 +502,7 @@ namespace DesktopAppDemo.ViewModels
 
                 // 等待任务完成（最多5秒）
                 var tasks = new List<Task>();
-                if (_mainTask != null && !_mainTask.IsCompleted && !_mainTask.IsFaulted)
+                if (!isMainTaskEnd && _mainTask != null && !_mainTask.IsCompleted && !_mainTask.IsFaulted)
                     tasks.Add(_mainTask);
                 if (_frameConsumerTask != null && !_frameConsumerTask.IsCompleted && !_frameConsumerTask.IsFaulted)
                     tasks.Add(_frameConsumerTask);
@@ -468,7 +533,10 @@ namespace DesktopAppDemo.ViewModels
             finally
             {
                 // 释放资源
-                _mainTask?.Dispose();
+                if (!isMainTaskEnd)
+                {
+                    _mainTask?.Dispose();
+                }
                 _frameConsumerTask?.Dispose();
                 _cts?.Dispose();
 
@@ -507,6 +575,12 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
+        private SKBitmap?[] _uiBitmap = new SKBitmap?[2];
+        private int _currentUiBtimapIndex = 0;
+        private Stopwatch _imageUpdateSt = Stopwatch.StartNew();
+        private long _lastImageUpdate = 0;
+        private readonly object _imageSync = new();
+
         private async Task ConsumeFramesAsync(CancellationToken token)
         {
             try
@@ -515,19 +589,25 @@ namespace DesktopAppDemo.ViewModels
                 {
                     SKBitmap? latestBitmap = null;
 
-                    // 取出所有可用帧，只保留最后一帧
-                    while (_frameChannel.Reader.TryRead(out SKBitmap? bitmap))
+                    try
+                    {
+                        // 取出所有可用帧，只保留最后一帧
+                        while (_frameChannel.Reader.TryRead(out SKBitmap? bitmap))
+                        {
+                            latestBitmap?.Dispose();
+                            latestBitmap = bitmap;
+                        }
+
+                        if (latestBitmap != null)
+                        {
+                            await UpdateUIAsync(latestBitmap).ConfigureAwait(false);
+                        }
+                    }
+                    finally
                     {
                         latestBitmap?.Dispose();
-                        latestBitmap = bitmap;
-                    }
-
-                    if (latestBitmap != null)
-                    {
-                        await UpdateUIAsync(latestBitmap).ConfigureAwait(false);
                     }
                 }
-
                 _logger.LogInformation("帧处理队列已退出");
             }
             catch (OperationCanceledException)
@@ -539,45 +619,6 @@ namespace DesktopAppDemo.ViewModels
                 _logger.LogError(ex, "帧处理错误");
                 await ResetAndShowError("错误", "操作失败: 帧处理错误，请检查日志中的详细信息");
             }
-        }
-
-        private SKBitmap?[] _uiBitmap = new SKBitmap?[2];
-        private int _currentUiBtimapIndex = 0;
-
-        private async Task UpdateUIAsync(SKBitmap bitmap)
-        {
-            // 限制UI更新频率
-            var now = DateTime.Now;
-            if ((now - _lastImageUpdate).TotalMilliseconds < _limitFpsTime)
-                return;
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                lock (_imageSync)
-                {
-                    // 更新图像和计时器
-                    _lastImageUpdate = now;
-
-                    if (_uiBitmap[_currentUiBtimapIndex] == null)
-                    {
-                        _uiBitmap[_currentUiBtimapIndex] = new SKBitmap(bitmap.Width, bitmap.Height, bitmap.ColorType, bitmap.AlphaType);
-                    }
-
-                    bitmap.CopyTo(_uiBitmap[_currentUiBtimapIndex]);
-                    DrawFps(_uiBitmap[_currentUiBtimapIndex], _currentUiFps);
-                    Image = _uiBitmap[_currentUiBtimapIndex];
-                    _currentUiBtimapIndex = _currentUiBtimapIndex == 0 ? 1 : 0;
-
-                    // 更新FPS计数器
-                    _uiFrameCount++;
-                    if (_lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
-                    {
-                        _currentUiFps = _uiFrameCount;
-                        _uiFrameCount = 0;
-                        _lastUiFpsUpdate.Restart();
-                    }
-                }
-            }, DispatcherPriority.Render);
         }
 
         private async Task ProcessFFMpegAsync(CancellationToken token)
@@ -610,8 +651,42 @@ namespace DesktopAppDemo.ViewModels
             catch (Exception ex)
             {
                 _logger.LogError(ex, "FFMpeg处理错误");
-                await ResetAndShowError("错误", "操作失败: 无发启动录制，请检查日志中的详细信息");
+                await ResetAndShowError("错误", "操作失败: 请检查日志中的详细信息");
             }
+        }
+
+        private async Task UpdateUIAsync(SKBitmap bitmap)
+        {
+            // 限制UI更新频率
+            if ((_imageUpdateSt.ElapsedMilliseconds - _lastImageUpdate) < _limitFpsTime)
+                return;
+            // 更新图像和计时器
+            _lastImageUpdate = _imageUpdateSt.ElapsedMilliseconds;
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                lock (_imageSync)
+                {
+                    if (_uiBitmap[_currentUiBtimapIndex] == null)
+                    {
+                        _uiBitmap[_currentUiBtimapIndex] = new SKBitmap(bitmap.Width, bitmap.Height, bitmap.ColorType, bitmap.AlphaType);
+                    }
+
+                    bitmap.CopyTo(_uiBitmap[_currentUiBtimapIndex]);
+                    DrawFps(_uiBitmap[_currentUiBtimapIndex], _currentUiFps);
+                    Image = _uiBitmap[_currentUiBtimapIndex];
+                    _currentUiBtimapIndex = _currentUiBtimapIndex == 0 ? 1 : 0;
+
+                    // 更新FPS计数器
+                    _uiFrameCount++;
+                    if (_lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
+                    {
+                        _currentUiFps = _uiFrameCount;
+                        _uiFrameCount = 0;
+                        _lastUiFpsUpdate.Restart();
+                    }
+                }
+            }, DispatcherPriority.Render);
         }
 
         #endregion
@@ -679,6 +754,27 @@ namespace DesktopAppDemo.ViewModels
             return args;
         }
 
+        private FFMpegArgumentProcessor BuildFilesProcessor()
+        {
+            if (string.IsNullOrWhiteSpace(this.SelectedFilePath))
+            {
+                throw new ArgumentException("未选择文件");
+            }
+            string[] files = this.SelectedFilePath.Split(';');
+
+            (int width, int height) = ParseResolution();
+
+            FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                .WithFileInput()
+                .WithFiles(files)
+                .WithImageHandle(OnImageArrived)
+                .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
+                .WithOutputSize(width, height)
+                .Build()
+                .CancellableThrough(out _cancel);
+            return args;
+        }
+
         private DateTime _lastOnArrivedTime = DateTime.UtcNow;
 
         private void OnImageArrived(long frameIndex, SKBitmap? bitmap)
@@ -708,7 +804,6 @@ namespace DesktopAppDemo.ViewModels
             catch (Exception ex)
             {
                 _logger.LogError(ex, "帧入队失败");
-                bitmap.Dispose();
             }
         }
 
@@ -717,7 +812,7 @@ namespace DesktopAppDemo.ViewModels
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 await MessageBox.Warning(title, content);
-                ResetUIState();
+                await ResetUIStateAsync();
             });
         }
 

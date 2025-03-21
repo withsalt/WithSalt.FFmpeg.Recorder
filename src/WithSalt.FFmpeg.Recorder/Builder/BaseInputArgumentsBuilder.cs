@@ -207,161 +207,146 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             return arguments;
         }
 
-        private async Task ProcessStream(Stream input, CancellationToken cancellationToken)
+        public async Task ProcessStream(Stream input, CancellationToken cancellationToken)
         {
-            const int bufferSize = 8192;
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-            long frameIndex = 0;
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(8192);
 
-            byte[] slidingBuffer = ArrayPool<byte>.Shared.Rent(1024 * 512);
-            int slidingCount = 0;
-            int slidingStart = 0;
+            MemoryStream jpegStream = new MemoryStream();
+            bool capturing = false;
+            int lastByte = -1;
+            long frameIndex = 0;
 
             try
             {
-                while (!cancellationToken.IsCancellationRequested)
+                int bytesRead;
+                while (!cancellationToken.IsCancellationRequested && (bytesRead = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
                 {
-                    int bytesRead = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
-                    if (bytesRead == 0)
-                        break;
-
-                    if (slidingCount + bytesRead > slidingBuffer.Length)
+                    for (int i = 0; i < bytesRead; i++)
                     {
-                        int newSize = Math.Min(16 * 1024 * 1024, Math.Max(slidingBuffer.Length * 2, slidingCount + bytesRead));
-                        byte[] newBuffer = ArrayPool<byte>.Shared.Rent(newSize);
-                        Buffer.BlockCopy(slidingBuffer, slidingStart, newBuffer, 0, slidingCount - slidingStart);
+                        byte currentByte = buffer[i];
 
-                        slidingCount -= slidingStart;
-                        slidingStart = 0;
+                        // 检测 JPEG 开始标志 (0xFFD8)，考虑跨缓冲区的情况
+                        if (!capturing && lastByte == 0xFF && currentByte == 0xD8)
+                        {
+                            if (jpegStream.Length != 0)
+                            {
+                                jpegStream.Position = 0;
+                                jpegStream.SetLength(0);
+                            }
+                            jpegStream.WriteByte(0xFF);
+                            jpegStream.WriteByte(currentByte);
+                            capturing = true;
+                        }
+                        else if (capturing)
+                        {
+                            jpegStream.WriteByte(currentByte);
 
-                        ArrayPool<byte>.Shared.Return(slidingBuffer);
-                        slidingBuffer = newBuffer;
+                            // 检测 JPEG 结束标志 (0xFFD9)
+                            if (lastByte == 0xFF && currentByte == 0xD9)
+                            {
+                                capturing = false;
+                                frameIndex++;
+                                DecodeImage(jpegStream, frameIndex);
+                            }
+                        }
+
+                        lastByte = currentByte;
                     }
+                }
 
-                    Buffer.BlockCopy(buffer, 0, slidingBuffer, slidingCount, bytesRead);
-                    slidingCount += bytesRead;
-
-                    int searchStart = slidingStart;
-                    bool processed = false;
-
-                    while (searchStart < slidingCount - 1)
-                    {
-                        int soi = FindSOI(slidingBuffer, searchStart, slidingCount - searchStart);
-                        if (soi == -1) break;
-
-                        int eoi = FindEOI(slidingBuffer, soi, slidingCount - soi);
-                        if (eoi == -1) break;
-
-                        int jpgLength = eoi - soi + 2;
-                        if (jpgLength <= 0)
-                        {
-                            searchStart = eoi + 2;
-                            continue;
-                        }
-
-                        processed = true;
-
-                        if (_imageProcessHandle != null)
-                        {
-                            try
-                            {
-                                using MemoryStream stream = new MemoryStream(slidingBuffer, soi, jpgLength, writable: false);
-                                SKBitmap bitmap = SKBitmap.Decode(stream);
-                                if (bitmap != null)
-                                {
-                                    if (bitmap.ColorType == SKColorType.Bgra8888)
-                                    {
-                                        _imageProcessHandle.Invoke(frameIndex++, bitmap);
-                                    }
-                                    else
-                                    {
-                                        SKBitmap? dest = bitmap.Copy(SKColorType.Bgra8888);
-                                        if (dest == null)
-                                        {
-                                            _imageProcessHandle.Invoke(frameIndex++, bitmap);
-                                        }
-                                        else
-                                        {
-                                            _imageProcessHandle.Invoke(frameIndex++, dest);
-                                            bitmap.Dispose();
-                                        }
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                // 记录解码错误
-                                Debug.WriteLine($"Decode error: {ex}");
-                            }
-                        }
-
-                        searchStart = eoi + 2;
-                    }
-
-                    if (processed)
-                    {
-                        if (searchStart >= slidingCount)
-                        {
-                            slidingCount = 0;
-                            slidingStart = 0;
-                        }
-                        else
-                        {
-                            if (searchStart - slidingStart > slidingBuffer.Length / 4)
-                            {
-                                int remaining = slidingCount - searchStart;
-                                Buffer.BlockCopy(slidingBuffer, searchStart, slidingBuffer, 0, remaining);
-                                slidingCount = remaining;
-                                slidingStart = 0;
-                            }
-                            else
-                            {
-                                slidingStart = searchStart;
-                            }
-                        }
-                    }
+                if (capturing && jpegStream.Length > 0)
+                {
+                    DropIncompleteJpegData(jpegStream);
                 }
             }
             catch (OperationCanceledException)
             {
-                // 正常取消
+
+            }
+            catch
+            {
+                throw;
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer);
-                ArrayPool<byte>.Shared.Return(slidingBuffer);
+                ArrayPool<byte>.Shared.Return(buffer, true);
+                await jpegStream.DisposeAsync();
                 await input.DisposeAsync();
             }
         }
 
-        // 查找 JPEG 开始标记 (Start of Image)
-        private int FindSOI(byte[] buffer, int start, int count)
+        /// <summary>
+        /// 处理完整的 JPEG 图像
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <param name="frameIndex"></param>
+        private void DecodeImage(MemoryStream stream, long frameIndex)
         {
-            if (start < 0 || count <= 1 || start + count > buffer.Length)
-                return -1;
-
-            int end = start + count - 1;
-            for (int i = start; i < end; i++)
+            try
             {
-                if (buffer[i] == 0xFF && buffer[i + 1] == 0xD8)
-                    return i;
+                if (_imageProcessHandle == null)
+                {
+                    return;
+                }
+                try
+                {
+                    stream.Position = 0;
+
+                    using (var skStram = new SKManagedStream(stream, false))
+                    {
+                        SKBitmap bitmap = SKBitmap.Decode(skStram);
+                        if (bitmap == null)
+                        {
+                            Debug.WriteLine($"Decode jpeg memory stream failed.");
+                            return;
+                        }
+
+                        if (bitmap.ColorType == SKColorType.Bgra8888)
+                        {
+                            _imageProcessHandle.Invoke(frameIndex++, bitmap);
+                        }
+                        else
+                        {
+                            SKBitmap? dest = bitmap.Copy(SKColorType.Bgra8888);
+                            if (dest == null)
+                            {
+                                _imageProcessHandle.Invoke(frameIndex++, bitmap);
+                            }
+                            else
+                            {
+                                _imageProcessHandle.Invoke(frameIndex++, dest);
+                                bitmap.Dispose();
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // 记录解码错误
+                    Debug.WriteLine($"Decode error: {ex}");
+                }
             }
-            return -1;
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error processing JPEG image: {ex.Message}");
+            }
+            finally
+            {
+                stream.Position = 0;
+                stream.SetLength(0);
+            }
         }
 
-        // 查找 JPEG 结束标记 (End of Image)
-        private int FindEOI(byte[] buffer, int start, int count)
+        /// <summary>
+        /// 处理不完整的 JPEG 数据
+        /// </summary>
+        /// <param name="stream"></param>
+        private void DropIncompleteJpegData(MemoryStream stream)
         {
-            if (start < 0 || count <= 1 || start + count > buffer.Length)
-                return -1;
+            Debug.WriteLine($"Warning: Incomplete JPEG data found ({stream.Length} bytes)");
 
-            int end = start + count - 1;
-            for (int i = start; i < end; i++)
-            {
-                if (buffer[i] == 0xFF && buffer[i + 1] == 0xD9)
-                    return i;
-            }
-            return -1;
+            stream.Position = 0;
+            stream.SetLength(0);
         }
     }
 }

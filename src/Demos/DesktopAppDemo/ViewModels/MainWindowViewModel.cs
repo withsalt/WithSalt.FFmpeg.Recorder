@@ -126,7 +126,7 @@ namespace DesktopAppDemo.ViewModels
                             IsShowFilesSource = false;
                         }
                         break;
-                    case 3:
+                    case 3:  //桌面录制
                         {
                             IsShowCamera = false;
                             IsShowRtspSource = false;
@@ -134,7 +134,7 @@ namespace DesktopAppDemo.ViewModels
                             IsShowFilesSource = false;
                         }
                         break;
-                    case 4:
+                    case 4:  //视频文件
                         {
                             IsShowCamera = false;
                             IsShowRtspSource = false;
@@ -308,6 +308,8 @@ namespace DesktopAppDemo.ViewModels
 #pragma warning restore CS8618
 #endif
 
+        #region UI Commond
+
         public void Exit()
         {
             IClassicDesktopStyleApplicationLifetime? lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
@@ -374,8 +376,6 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
-        #region Startup
-
         private bool _isProcessing = false;
 
         public async Task Start()
@@ -426,6 +426,10 @@ namespace DesktopAppDemo.ViewModels
                 _isProcessing = false;
             }
         }
+
+        #endregion
+
+        #region Startup
 
         private async Task StartRecord()
         {
@@ -556,20 +560,7 @@ namespace DesktopAppDemo.ViewModels
 
                 if (!isClosing)
                 {
-                    //如果不是触发关闭事件，则更新UI
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        this.Tips = "待命中...";
-                        this.BtnName = "开启";
-                        this.BtnBackgroundColor = Brushes.GreenYellow;
-                        this.IsRunning = false;
-
-                        if (Image != null)
-                        {
-                            Image.Dispose();
-                            Image = null;
-                        }
-                    });
+                    await ResetUIStateAsync();
                 }
             }
         }

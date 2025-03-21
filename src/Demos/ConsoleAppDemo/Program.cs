@@ -93,8 +93,8 @@ namespace ConsoleAppDemo
 
             //await FilesTest(frameChannel);
             //await CameraTest(frameChannel);
-            await RtspTest(frameChannel);
-            //await DesktopTest(frameChannel);
+            //await RtspTest(frameChannel);
+            await DesktopTest(frameChannel);
 
             Console.WriteLine("Done.");
         }
@@ -128,7 +128,7 @@ namespace ConsoleAppDemo
         {
             FFMpegArgumentProcessor ffmpegCmd = new WithSalt.FFmpeg.Recorder.FFmpegArgumentsBuilder()
                 .WithDesktopInput()
-                .WithRectangle(new SKRect(0, 0, 1280, 720))
+                .WithRectangle(new SKRect(0, 0, 1920, 1080))
                 .WithFramerate(60)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
@@ -139,7 +139,7 @@ namespace ConsoleAppDemo
                         bitmap.Dispose();
                     }
                 })
-                .WithOutputQuality(OutputQuality.Medium)
+                .WithOutputQuality(OutputQuality.High)
                 .Build()
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;

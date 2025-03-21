@@ -28,8 +28,16 @@ dotnet add package WithSalt.FFmpeg.Recorder
 ```
 
 ### 安装FFmpeg  
-Windows系统下，可前往 https://github.com/BtbN/FFmpeg-Builds/releases 下载编译好的FFmpeg。然后将ffmpeg.exe放入应用程序根目录，或者按照源代码中的搜索逻辑，放入支持自动检索的目录。  
-Linux系统下，通过命令：`sudo apt install ffmpeg`安装。  
+Windows系统，可前往 https://github.com/BtbN/FFmpeg-Builds/releases 下载编译好的FFmpeg。然后将ffmpeg.exe放入应用程序根目录，或者放入下一小节中支持自动搜索的目录。  
+建议在项目配置中新增条件编译参数，在编译Windows环境运行的引用程序时，自动复制ffmpeg。  
+```
+<ItemGroup Condition="'$(OS)' == 'Windows_NT' OR '$(RuntimeIdentifier)' == 'win-x64'">
+	<None Update="runtimes\win-x64\bin\ffmpeg.exe">
+		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+</ItemGroup>
+```
+Linux系统（例如Debian;Ubuntu），通过命令：`sudo apt install ffmpeg` 安装。  
 可以参考项目中Demo示例中ffmpeg路径。  
 
 ### 加载FFmpeg

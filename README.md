@@ -223,7 +223,13 @@ namespace ConsoleAppDemo
     }
 }
 
-```  
+```
+
+### 开发建议
+1. 强烈建议使用异步队列处理图像帧  
+   通常情况下，比如说使用CPU进行图像别，是比较慢的，处理输入远远跟不上ffmpeg获取视频帧的速度。使用异步队列可保证管道畅通，且配合合理丢帧策略，可以让开发的引用程序非常丝滑。可以参考示例项目。  
+2. 随应用程序携带ffmpeg应用程序时，建议放到运行时目录中，支持自动搜索，应用程序目录也不会乱糟糟的  
+   比如：runtimes\win-x64\bin\ffmpeg.exe  
 
 ### 更多完整示例  
 [https://github.com/withsalt/BemfaCloud/tree/main/src/Examples](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos)

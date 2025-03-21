@@ -28,8 +28,16 @@ dotnet add package WithSalt.FFmpeg.Recorder
 ```
 
 ### 安装FFmpeg  
-Windows系统下，可前往 https://github.com/BtbN/FFmpeg-Builds/releases 下载编译好的FFmpeg。然后将ffmpeg.exe放入应用程序根目录，或者按照源代码中的搜索逻辑，放入支持自动检索的目录。  
-Linux系统下，通过命令：`sudo apt install ffmpeg`安装。  
+Windows系统，可前往 https://github.com/BtbN/FFmpeg-Builds/releases 下载编译好的FFmpeg。然后将ffmpeg.exe放入应用程序根目录，或者放入下一小节中支持自动搜索的目录。  
+建议在项目配置中新增条件编译参数，在编译Windows环境运行的引用程序时，自动复制ffmpeg。  
+```
+<ItemGroup Condition="'$(OS)' == 'Windows_NT' OR '$(RuntimeIdentifier)' == 'win-x64'">
+	<None Update="runtimes\win-x64\bin\ffmpeg.exe">
+		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+</ItemGroup>
+```
+Linux系统（例如Debian;Ubuntu），通过命令：`sudo apt install ffmpeg` 安装。  
 可以参考项目中Demo示例中ffmpeg路径。  
 
 ### 加载FFmpeg
@@ -38,12 +46,17 @@ Linux系统下，通过命令：`sudo apt install ffmpeg`安装。
 //使用默认的ffmpeg加载器
 FFmpegHelper.SetDefaultFFmpegLoador();
 ```
-调用`SetDefaultFFmpegLoador`之后，程序会从以下路径开始搜索ffmpeg应用程序所在位置。  
-- 优先查找与当前进程架构匹配的运行时目录（通过 GetProcessArchitecturePath() 获取架构标识），如：.\runtimes\win-x64\bin\ffmpeg.exe  
-- 包含开发环境（源目录），如：.\ffmpeg.exe  
-- 生产环境的路径配置，如：.\bin\ffmpeg.exe  
-
-当以上路径均找不到时，查找环境变量Path中的逻辑。所有路径均找不到ffmpeg应用程序后，抛出异常。  
+调用`SetDefaultFFmpegLoador`之后，会进行以下初始化操作：  
+1. 程序会从以下路径开始搜索ffmpeg应用程序所在位置  
+    - 优先查找与当前进程架构匹配的运行时目录，如：.\runtimes\win-x64\bin\ffmpeg.exe  
+    - 应用程序所在根目录，如：<应用程序目录>\ffmpeg.exe  
+    - 在应用程序目录下的bin目录，如：<应用程序目录>\bin\ffmpeg.exe  
+    - [Windows]系统变量`Path`下面的所有目录  
+    - [Linux]ffmpeg安装目录，包括：/usr/bin;/usr/local/bin;/usr/share  
+      
+    当以上路径均找不到时，抛出异常。  
+2. 设置ffmpeg工作目录  
+   工作目录默认设置为应用程序根目录，且创建`tmp`目录作为ffmpeg临时文件存放目录  
 
 ### 构建FFmpeg执行参数  
 如果进行桌面录制  
@@ -210,7 +223,13 @@ namespace ConsoleAppDemo
     }
 }
 
-```  
+```
+
+### 开发建议
+1. 强烈建议使用异步队列处理图像帧  
+   通常情况下，比如说使用CPU进行图像别，是比较慢的，处理输入远远跟不上ffmpeg获取视频帧的速度。使用异步队列可保证管道畅通，且配合合理丢帧策略，可以让开发的引用程序非常丝滑。可以参考示例项目。  
+2. 随应用程序携带ffmpeg应用程序时，建议放到运行时目录中，支持自动搜索，应用程序目录也不会乱糟糟的  
+   比如：runtimes\win-x64\bin\ffmpeg.exe  
 
 ### 更多完整示例  
 [https://github.com/withsalt/BemfaCloud/tree/main/src/Examples](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos)

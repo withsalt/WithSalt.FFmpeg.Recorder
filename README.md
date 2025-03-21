@@ -38,12 +38,17 @@ Linux系统下，通过命令：`sudo apt install ffmpeg`安装。
 //使用默认的ffmpeg加载器
 FFmpegHelper.SetDefaultFFmpegLoador();
 ```
-调用`SetDefaultFFmpegLoador`之后，程序会从以下路径开始搜索ffmpeg应用程序所在位置。  
-- 优先查找与当前进程架构匹配的运行时目录（通过 GetProcessArchitecturePath() 获取架构标识），如：.\runtimes\win-x64\bin\ffmpeg.exe  
-- 包含开发环境（源目录），如：.\ffmpeg.exe  
-- 生产环境的路径配置，如：.\bin\ffmpeg.exe  
-
-当以上路径均找不到时，查找环境变量Path中的逻辑。所有路径均找不到ffmpeg应用程序后，抛出异常。  
+调用`SetDefaultFFmpegLoador`之后，会进行以下初始化操作：  
+1. 程序会从以下路径开始搜索ffmpeg应用程序所在位置  
+    - 优先查找与当前进程架构匹配的运行时目录，如：.\runtimes\win-x64\bin\ffmpeg.exe  
+    - 应用程序所在根目录，如：<应用程序目录>\ffmpeg.exe  
+    - 在应用程序目录下的bin目录，如：<应用程序目录>\bin\ffmpeg.exe  
+    - [Windows]系统变量`Path`下面的所有目录  
+    - [Linux]ffmpeg安装目录，包括：/usr/bin;/usr/local/bin;/usr/share  
+      
+    当以上路径均找不到时，抛出异常。  
+2. 设置ffmpeg工作目录  
+   工作目录默认设置为应用程序根目录，且创建`tmp`目录作为ffmpeg临时文件存放目录  
 
 ### 构建FFmpeg执行参数  
 如果进行桌面录制  

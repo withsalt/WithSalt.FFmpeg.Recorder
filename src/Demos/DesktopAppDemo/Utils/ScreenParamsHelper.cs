@@ -40,12 +40,12 @@ namespace DesktopAppDemo.Utils
                 }
                 height = paramVal[3];
 
-                if (x >= width || x < -width)
+                if (x >= width)
                 {
                     message = "x参数不正确，x坐标不能大于、等于width或小于-width，示例：0,0,800,800（x, y, width, height）";
                     return false;
                 }
-                if (y >= height || y < -height)
+                if (y >= height)
                 {
                     message = "y参数不正确，y坐标不能大于、等于height或小于-height，示例：0,0,800,800（x, y, width, height）";
                     return false;

@@ -209,8 +209,8 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
         public async Task ProcessStream(Stream input, CancellationToken cancellationToken)
         {
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(8192);
-
+            const int bufferSize = 16384;
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
             MemoryStream jpegStream = new MemoryStream();
             bool capturing = false;
             int lastByte = -1;
@@ -219,13 +219,14 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             try
             {
                 int bytesRead;
-                while (!cancellationToken.IsCancellationRequested && (bytesRead = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                while (!cancellationToken.IsCancellationRequested && (bytesRead = await input.ReadAsync(buffer, 0, bufferSize, cancellationToken)) > 0)
                 {
+                    int startPos = -1;
                     for (int i = 0; i < bytesRead; i++)
                     {
                         byte currentByte = buffer[i];
 
-                        // 检测 JPEG 开始标志 (0xFFD8)，考虑跨缓冲区的情况
+                        // 检测 JPEG start marker (FFD8)
                         if (!capturing && lastByte == 0xFF && currentByte == 0xD8)
                         {
                             if (jpegStream.Length != 0)
@@ -233,27 +234,37 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                                 jpegStream.Position = 0;
                                 jpegStream.SetLength(0);
                             }
-                            jpegStream.WriteByte(0xFF);
-                            jpegStream.WriteByte(currentByte);
                             capturing = true;
+                            startPos = i - 1;
                         }
-                        else if (capturing)
+                        // 检测 JPEG end marker (FFD9)
+                        else if (capturing && lastByte == 0xFF && currentByte == 0xD9)
                         {
-                            jpegStream.WriteByte(currentByte);
+                            if (startPos == -1) startPos = 0;
+                            int lengthToWrite = i - startPos + 1;
+                            await jpegStream.WriteAsync(buffer, startPos, lengthToWrite, cancellationToken);
 
-                            // 检测 JPEG 结束标志 (0xFFD9)
-                            if (lastByte == 0xFF && currentByte == 0xD9)
-                            {
-                                capturing = false;
-                                frameIndex++;
-                                DecodeImage(jpegStream, frameIndex);
-                            }
+                            capturing = false;
+
+                            DecodeImage(jpegStream, ++frameIndex);
+
+                            startPos = -1;
                         }
 
                         lastByte = currentByte;
                     }
+
+                    if (capturing)
+                    {
+                        if (startPos == -1) startPos = 0;
+                        int lengthToWrite = bytesRead - startPos;
+                        await jpegStream.WriteAsync(buffer, startPos, lengthToWrite, cancellationToken);
+
+                        startPos = -1;
+                    }
                 }
 
+                // 如果读完了流还在捕获状态，说明最后的帧不完整，可以根据需要丢弃
                 if (capturing && jpegStream.Length > 0)
                 {
                     DropIncompleteJpegData(jpegStream);
@@ -261,7 +272,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             }
             catch (OperationCanceledException)
             {
-
             }
             catch
             {
@@ -291,7 +301,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                 try
                 {
                     stream.Position = 0;
-
                     using (var skStram = new SKManagedStream(stream, false))
                     {
                         SKBitmap bitmap = SKBitmap.Decode(skStram);
@@ -303,18 +312,18 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
                         if (bitmap.ColorType == SKColorType.Bgra8888)
                         {
-                            _imageProcessHandle.Invoke(frameIndex++, bitmap);
+                            _imageProcessHandle.Invoke(frameIndex, bitmap);
                         }
                         else
                         {
                             SKBitmap? dest = bitmap.Copy(SKColorType.Bgra8888);
                             if (dest == null)
                             {
-                                _imageProcessHandle.Invoke(frameIndex++, bitmap);
+                                _imageProcessHandle.Invoke(frameIndex, bitmap);
                             }
                             else
                             {
-                                _imageProcessHandle.Invoke(frameIndex++, dest);
+                                _imageProcessHandle.Invoke(frameIndex, dest);
                                 bitmap.Dispose();
                             }
                         }

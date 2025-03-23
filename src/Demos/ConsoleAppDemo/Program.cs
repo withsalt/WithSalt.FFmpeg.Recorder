@@ -115,6 +115,7 @@ namespace ConsoleAppDemo
                 .WithOutputSize(1920, 1080)
                 .WithOutputQuality(OutputQuality.Medium)
                 .Build()
+                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
 
@@ -141,6 +142,7 @@ namespace ConsoleAppDemo
                 })
                 .WithOutputQuality(OutputQuality.High)
                 .Build()
+                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
 
@@ -159,7 +161,7 @@ namespace ConsoleAppDemo
                 .WithRstpInput()
                 .WithUri("rtsp://admin:admin123.@192.168.188.66:554/stream1")
                 //.WithUdp()
-                .WithTimeout(3)
+                .WithTimeout(6)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
                     if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))

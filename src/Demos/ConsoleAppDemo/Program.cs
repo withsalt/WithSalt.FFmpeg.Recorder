@@ -61,32 +61,25 @@ namespace ConsoleAppDemo
                         frameIndex = data.frameIndex;
                     }
 
-                    try
+                    if (latestBitmap != null)
                     {
-                        if (latestBitmap != null)
+                        // 更新FPS计数器
+                        uiFrameCount++;
+                        if (lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
                         {
-                            // 更新FPS计数器
-                            uiFrameCount++;
-                            if (lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
-                            {
-                                currentUiFps = uiFrameCount;
-                                totalUiFps += uiFrameCount;
-                                uiFrameCount = 0;
-                                lastUiFpsUpdate.Restart();
+                            currentUiFps = uiFrameCount;
+                            totalUiFps += uiFrameCount;
+                            uiFrameCount = 0;
+                            lastUiFpsUpdate.Restart();
 
-                                TimeSpan totalElapsed = totalUiFpsUpdate.Elapsed;
-                                int avgFps = (int)(totalUiFps / Math.Max(1, totalElapsed.TotalSeconds));
+                            TimeSpan totalElapsed = totalUiFpsUpdate.Elapsed;
+                            int avgFps = (int)(totalUiFps / Math.Max(1, totalElapsed.TotalSeconds));
 
-                                Console.Write($"\r{(int)totalElapsed.TotalHours:00}:{totalElapsed.Minutes:00}:{totalElapsed.Seconds:00} | Current FPS: {currentUiFps} | AVG FPS: {avgFps}   ");
-                            }
-
-                            //Console.WriteLine("收到图片帧");
-                            //SaveBitmapAsImage(latestBitmap, $"output/{frameIndex}.jpg", SKEncodedImageFormat.Jpeg, 100);
+                            Console.Write($"\r{(int)totalElapsed.TotalHours:00}:{totalElapsed.Minutes:00}:{totalElapsed.Seconds:00} | Current FPS: {currentUiFps} | AVG FPS: {avgFps}   ");
                         }
-                    }
-                    finally
-                    {
-                        latestBitmap?.Dispose();
+
+                        //Console.WriteLine("收到图片帧");
+                        //SaveBitmapAsImage(latestBitmap, $"output/{frameIndex}.jpg", SKEncodedImageFormat.Jpeg, 100);
                     }
                 }
             });
@@ -240,8 +233,6 @@ namespace ConsoleAppDemo
             {
                 data.SaveTo(stream);
             }
-
-            bitmap.Dispose();
         }
     }
 }

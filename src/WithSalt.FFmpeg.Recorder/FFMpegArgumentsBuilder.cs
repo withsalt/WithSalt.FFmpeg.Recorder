@@ -10,9 +10,9 @@ namespace WithSalt.FFmpeg.Recorder
             return new CameraInputArgumentsBuilder();
         }
 
-        public IRtspInputArgumentsBuilder WithRstpInput()
+        public IStreamInputArgumentsProxyBuilder WithStreamInput()
         {
-            return new RtspInputArgumentsBuilder();
+            return new StreamInputArgumentsProxyBuilder();
         }
 
         public IDesktopInputArgumentsBuilder WithDesktopInput()

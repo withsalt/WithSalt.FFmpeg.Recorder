@@ -8,42 +8,22 @@ using WithSalt.FFmpeg.Recorder.Interface;
 
 namespace WithSalt.FFmpeg.Recorder.Builder
 {
-    internal class RtspInputArgumentsBuilder : BaseInputArgumentsBuilder, IRtspInputArgumentsBuilder
+    internal class RtspInputArgumentsBuilder : BaseStreamInputArgumentsBuilder, IRtspInputArgumentsBuilder
     {
-        private Uri? _uri = null;
         private List<IArgument> _inputArgumentList = new List<IArgument>();
 
-        public RtspInputArgumentsBuilder()
+        public RtspInputArgumentsBuilder(Uri uri) : base(uri)
         {
-            _inputArgumentList.AddRange(CreateLowDelayArguments(probeSize: 128));
+            List<IArgument> lowDelayArguments = CreateLowDelayArguments(probeSize: 128);
             //禁用包重排序
-            _inputArgumentList.Add(new CustomArgument("-reorder_queue_size 0"));
+            lowDelayArguments.Add(new CustomArgument("-reorder_queue_size 0"));
             //减小接收缓冲区
-            _inputArgumentList.Add(new CustomArgument("-buffer_size 8192"));
+            lowDelayArguments.Add(new CustomArgument("-buffer_size 8192"));
+            //直接访问输入数据（绕过缓存层），减少内存拷贝带来的延迟
+            lowDelayArguments.Add(new CustomArgument("-avioflags direct"));
+            _lowDelayArguments.AddRange(lowDelayArguments);
+
             _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
-        }
-
-        public IRtspInputArgumentsBuilder WithUri(string uriStr)
-        {
-            if (string.IsNullOrWhiteSpace(uriStr))
-            {
-                throw new ArgumentNullException(nameof(uriStr), "Invalid URI.");
-            }
-            if (!Uri.TryCreate(uriStr, UriKind.Absolute, out Uri? uri))
-            {
-                throw new ArgumentException(nameof(uriStr), "Invalid URI.");
-            }
-            return WithUri(uri);
-        }
-
-        public IRtspInputArgumentsBuilder WithUri(Uri uri)
-        {
-            if (!uri.ToString().StartsWith("rtsp", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new ArgumentException(nameof(uri), "Invalid URI. Your input uri is not a rtsp stream.");
-            }
-            _uri = uri;
-            return this;
         }
 
         bool hasSetTransport = false;
@@ -79,19 +59,41 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             return this;
         }
 
+        public IRtspInputArgumentsBuilder WithProbeSize(uint probeSize)
+        {
+            if (probeSize == 0)
+                return this;
+
+            if (_inputArgumentList.Count == 0)
+                return this;
+
+            for (int i = 0; i < _inputArgumentList.Count; i++)
+            {
+                if (_inputArgumentList[i].Text.StartsWith("-probesize", StringComparison.OrdinalIgnoreCase))
+                {
+                    _inputArgumentList[i] = new CustomArgument($"-probesize {probeSize}");
+                    return this;
+                }
+            }
+            return this;
+        }
+
         public override FFMpegArgumentProcessor Build()
         {
-            if (_uri == null)
-            {
-                throw new ArgumentException("You have not specified the RTSP stream address yet. Please set the RTSP stream address using the WithUri method.");
-            }
             if (!_inputArgumentList.Any(s => s.Text.StartsWith("-rtsp_transport", StringComparison.OrdinalIgnoreCase)))
             {
                 WithTcp();
             }
+
+            _filterArgumentList.Add(new CustomArgument("-map 0:v?"));
+
             _arguments = FFMpegArguments
                .FromUrlInput(_uri, opt =>
                {
+                   foreach (var argument in _lowDelayArguments)
+                   {
+                       opt.WithArgument(argument);
+                   }
                    foreach (var argument in _inputArgumentList)
                    {
                        opt.WithArgument(argument);

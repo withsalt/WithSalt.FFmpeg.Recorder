@@ -68,6 +68,10 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             _arguments = FFMpegArguments
                .FromDeviceInput(this._deviceName, opt =>
                {
+                   foreach (var argument in _lowDelayArguments)
+                   {
+                       opt.WithArgument(argument);
+                   }
                    foreach (var argument in _inputArgumentList)
                    {
                        opt.WithArgument(argument);

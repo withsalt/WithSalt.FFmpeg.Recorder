@@ -73,6 +73,10 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
                 _arguments = FFMpegArguments.FromFileInput(_inputFiles, false, opt =>
                 {
+                    foreach (var argument in _lowDelayArguments)
+                    {
+                        opt.WithArgument(argument);
+                    }
                     foreach (var argument in _inputArgumentList)
                     {
                         opt.WithArgument(argument);

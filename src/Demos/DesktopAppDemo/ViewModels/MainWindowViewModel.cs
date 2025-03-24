@@ -712,16 +712,51 @@ namespace DesktopAppDemo.ViewModels
         {
             (int width, int height) = ParseResolution();
 
-            FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
-                .WithRstpInput()
-                .WithUri(RtspSource)
-                .WithTimeout(3)
-                .WithImageHandle(OnImageArrived)
-                .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
-                .WithOutputSize(width, height)
-                .Build()
-                .CancellableThrough(out _cancel);
-            return args;
+            if (!Uri.TryCreate(RtspSource, UriKind.Absolute, out Uri? uri))
+            {
+                throw new ArgumentException(nameof(RtspSource), "Invalid URI.");
+            }
+
+            if (uri.Scheme.StartsWith("rtsp", StringComparison.OrdinalIgnoreCase))
+            {
+                FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                    .WithStreamInput()
+                    .WithRtsp(uri)
+                    .WithTimeout(3)
+                    .WithImageHandle(OnImageArrived)
+                    .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
+                    .WithOutputSize(width, height)
+                    .Build()
+                    .CancellableThrough(out _cancel);
+                return args;
+            }
+            else if (uri.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                    .WithStreamInput()
+                    .WithHttp(uri)
+                    .WithTimeout(3)
+                    .WithImageHandle(OnImageArrived)
+                    .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
+                    .WithOutputSize(width, height)
+                    .Build()
+                    .CancellableThrough(out _cancel);
+                return args;
+            }
+            else if (uri.Scheme.StartsWith("rtmp", StringComparison.OrdinalIgnoreCase))
+            {
+                FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                    .WithStreamInput()
+                    .WithRtmp(uri)
+                    .WithTimeout(3)
+                    .WithImageHandle(OnImageArrived)
+                    .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
+                    .WithOutputSize(width, height)
+                    .Build()
+                    .CancellableThrough(out _cancel);
+                return args;
+            }
+            throw new Exception("Unsupported URI scheme");
         }
 
         private FFMpegArgumentProcessor BuildDesktopProcessor()

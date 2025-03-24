@@ -16,5 +16,14 @@ namespace WithSalt.FFmpeg.Recorder.Interface
         IFFmpegArgumentsBuilder WithOutputQuality(OutputQuality quality = OutputQuality.Medium);
 
         IFFmpegArgumentsBuilder WithOutputSize(int width, int height);
+
+        /// <summary>
+        /// 不添加低延迟参数
+        /// </summary>
+        /// <returns></returns>
+        /// <remarks>
+        /// 某些情况下，低延迟参数会导致录制失败
+        /// </remarks>
+        IFFmpegArgumentsBuilder WithoutLowDelayArguments();
     }
 }

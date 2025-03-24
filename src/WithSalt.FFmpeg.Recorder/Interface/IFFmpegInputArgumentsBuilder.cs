@@ -4,7 +4,7 @@
     {
         ICameraInputArgumentsBuilder WithCameraInput();
 
-        IRtspInputArgumentsBuilder WithRstpInput();
+        IStreamInputArgumentsProxyBuilder WithStreamInput();
 
         IDesktopInputArgumentsBuilder WithDesktopInput();
 

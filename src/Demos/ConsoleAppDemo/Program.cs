@@ -61,36 +61,48 @@ namespace ConsoleAppDemo
                         frameIndex = data.frameIndex;
                     }
 
-                    if (latestBitmap != null)
+                    try
                     {
-                        // 更新FPS计数器
-                        uiFrameCount++;
-                        if (lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
+                        if (latestBitmap != null)
                         {
-                            currentUiFps = uiFrameCount;
-                            totalUiFps += uiFrameCount;
-                            uiFrameCount = 0;
-                            lastUiFpsUpdate.Restart();
+                            // 更新FPS计数器
+                            uiFrameCount++;
+                            if (lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
+                            {
+                                currentUiFps = uiFrameCount;
+                                totalUiFps += uiFrameCount;
+                                uiFrameCount = 0;
+                                lastUiFpsUpdate.Restart();
 
-                            TimeSpan totalElapsed = totalUiFpsUpdate.Elapsed;
-                            int avgFps = (int)(totalUiFps / Math.Max(1, totalElapsed.TotalSeconds));
+                                TimeSpan totalElapsed = totalUiFpsUpdate.Elapsed;
+                                int avgFps = (int)(totalUiFps / Math.Max(1, totalElapsed.TotalSeconds));
 
-                            Console.Write($"\r{(int)totalElapsed.TotalHours:00}:{totalElapsed.Minutes:00}:{totalElapsed.Seconds:00} | Current FPS: {currentUiFps} | AVG FPS: {avgFps}   ");
+                                Console.Write($"\r{(int)totalElapsed.TotalHours:00}:{totalElapsed.Minutes:00}:{totalElapsed.Seconds:00} | Current FPS: {currentUiFps} | AVG FPS: {avgFps}   ");
+                            }
+
+                            //Console.WriteLine("收到图片帧");
+                            //SaveBitmapAsImage(latestBitmap, $"output/{frameIndex}.jpg", SKEncodedImageFormat.Jpeg, 100);
                         }
-
-                        //Console.WriteLine("收到图片帧");
-                        //SaveBitmapAsImage(latestBitmap, $"output/{frameIndex}.jpg", SKEncodedImageFormat.Jpeg, 100);
+                    }
+                    finally
+                    {
+                        latestBitmap?.Dispose();
                     }
                 }
             });
 
             //await FilesTest(frameChannel);
             //await CameraTest(frameChannel);
+            //await DesktopTest(frameChannel);
             //await RtspTest(frameChannel);
-            await DesktopTest(frameChannel);
+            await RtmpTest(frameChannel);
+            //await HttpHLSTest(frameChannel);
+
 
             Console.WriteLine("Done.");
         }
+
+        private static Action? _cancel = null;
 
         static async Task FilesTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
@@ -145,14 +157,11 @@ namespace ConsoleAppDemo
             await ffmpegCmd.ProcessAsynchronously();
         }
 
-        private static Action? _cancel = null;
-
         static async Task RtspTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-
             FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
-                .WithRstpInput()
-                .WithUri("rtsp://admin:admin123.@192.168.188.66:554/stream1")
+                .WithStreamInput()
+                .WithRtsp("rtsp://admin:admin123.@192.168.188.66:554/stream1")
                 //.WithUdp()
                 .WithTimeout(6)
                 .WithImageHandle((frameIndex, bitmap) =>
@@ -163,6 +172,57 @@ namespace ConsoleAppDemo
                     }
                 })
                 //RTSP视频流使用较低质量编码可能导致图像错误
+                .WithOutputQuality(OutputQuality.Medium)
+                .Build()
+                .CancellableThrough(out _cancel)
+                //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
+                ;
+
+            var cmd = ffmpegCmd.Arguments;
+            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
+
+            await ffmpegCmd.ProcessAsynchronously();
+        }
+
+        static async Task HttpHLSTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
+        {
+            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+                .WithStreamInput()
+                .WithHttp("http://192.168.188.1:10000/rtp/239.93.0.58:5140")
+                .WithTimeout(10)
+                .WithProbeSize(64 * 1024)
+                .WithImageHandle((frameIndex, bitmap) =>
+                {
+                    if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))
+                    {
+                        bitmap.Dispose();
+                    }
+                })
+                //RTSP视频流使用较低质量编码可能导致图像错误
+                .WithOutputQuality(OutputQuality.Medium)
+                .Build()
+                .CancellableThrough(out _cancel)
+                //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
+                ;
+
+            var cmd = ffmpegCmd.Arguments;
+            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
+
+            await ffmpegCmd.ProcessAsynchronously();
+        }
+
+        static async Task RtmpTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
+        {
+            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+                .WithStreamInput()
+                .WithRtmp("rtmp://192.168.188.22:1935/live/stream?user=admin&pass=oxV7PDo0CSpKMra7IXTmlx5Xo5KOeFsk")
+                .WithImageHandle((frameIndex, bitmap) =>
+                {
+                    if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))
+                    {
+                        bitmap.Dispose();
+                    }
+                })
                 .WithOutputQuality(OutputQuality.Medium)
                 .Build()
                 .CancellableThrough(out _cancel)

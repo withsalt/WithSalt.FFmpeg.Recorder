@@ -76,6 +76,10 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                 string path = !string.IsNullOrWhiteSpace(inputPath) ? inputPath : ":0.0";
                 _arguments = FFMpegArguments.FromFileInput(path, false, opt =>
                 {
+                    foreach (var argument in _lowDelayArguments)
+                    {
+                        opt.WithArgument(argument);
+                    }
                     foreach (var argument in _inputArgumentList)
                     {
                         opt.WithArgument(argument);

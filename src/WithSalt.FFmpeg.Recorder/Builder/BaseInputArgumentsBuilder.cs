@@ -14,12 +14,13 @@ using WithSalt.FFmpeg.Recorder.Models;
 
 namespace WithSalt.FFmpeg.Recorder.Builder
 {
-    public abstract class BaseInputArgumentsBuilder : IFFmpegArgumentsBuilder
+    internal abstract class BaseInputArgumentsBuilder : IFFmpegArgumentsBuilder
     {
         protected FFMpegArguments? _arguments;
 
         protected List<IArgument> _outputArgumentList = new List<IArgument>();
         protected List<IArgument> _filterArgumentList = new List<IArgument>();
+        protected List<IArgument> _lowDelayArguments = new List<IArgument>();
 
         private Action<long, SKBitmap>? _imageProcessHandle;
 
@@ -96,17 +97,17 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                     default:
                     case OutputQuality.High:
                         _outputArgumentList.Add(new ForcePixelFormat("yuv444p"));
-                        _outputArgumentList.Add(new CustomArgument("-color_range jpeg"));
+                        _outputArgumentList.Add(new CustomArgument("-color_range pc"));
                         _outputArgumentList.Add(new CustomArgument("-q:v 2"));
                         break;
                     case OutputQuality.Medium:
                         _outputArgumentList.Add(new ForcePixelFormat("yuv420p"));
-                        _outputArgumentList.Add(new CustomArgument("-color_range jpeg"));
+                        _outputArgumentList.Add(new CustomArgument("-color_range pc"));
                         _outputArgumentList.Add(new CustomArgument("-q:v 10"));
                         break;
                     case OutputQuality.Low:
                         _outputArgumentList.Add(new ForcePixelFormat("yuv420p"));
-                        _outputArgumentList.Add(new CustomArgument("-color_range jpeg"));
+                        _outputArgumentList.Add(new CustomArgument("-color_range pc"));
                         _outputArgumentList.Add(new CustomArgument("-q:v 25"));
                         break;
                 }
@@ -171,15 +172,25 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             return this;
         }
 
+        public IFFmpegArgumentsBuilder WithoutLowDelayArguments()
+        {
+            _lowDelayArguments.Clear();
+            return this;
+        }
+
         /// <summary>
         /// 创建低延迟参数组合
         /// </summary>
         /// <param name="probeSize">值的大小影响输入流探测行为</param>
         /// <returns></returns>
-        protected List<IArgument> CreateLowDelayArguments(int probeSize = 64)
+        protected List<IArgument> CreateLowDelayArguments(uint probeSize = 64)
         {
             List<IArgument> arguments = new List<IArgument>()
             {
+                //=======================================================================================
+                //以下参数谨慎启用，错误的参数可能导致无法正常工作
+                //=======================================================================================
+
                 //禁用输入流的缓冲机制，避免数据在内存中堆积，实现实时处理 + 丢弃损坏的包
                 new CustomArgument("-fflags nobuffer+discardcorrupt"),
 
@@ -189,11 +200,9 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                 //允许低延迟参数组合
                 new CustomArgument($"-strict experimental"),
 
-                //直接访问输入数据（绕过缓存层），减少内存拷贝带来的延迟
-                new CustomArgument("-avioflags direct"),
-
-                //=======================================================================================
-                //以下参数谨慎启用，错误的参数可能导致无法正常工作
+                //控制输入 / 输出线程间数据队列缓冲大小的关键参数，直接影响实时流处理的延迟和稳定性
+                //队列越大：能缓冲更多数据，抗突发流量波动能力越强，但内存占用高、延迟增加；队列越小：实时性更好、内存占用低，但容易因处理不及时导致丢帧或错误
+                new CustomArgument($"-thread_queue_size 1MB"),
 
                 //控制输入流探测行为的关键参数，其作用直接影响流的初始化和延迟表现
                 //默认值较高（几 MB）：FFmpeg 会读取较多数据确保格式正确，但导致初始延迟增加

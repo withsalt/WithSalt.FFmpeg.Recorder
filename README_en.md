@@ -7,7 +7,7 @@ A high-performance video recording framework built on FFmpeg, supporting the con
 ### **Supported Input Sources**  
 - Local video files (supports multiple files)  
 - Real-time camera capture  
-- RTSP streaming  
+- Streaming (RTSP, RTMP, HLS, etc.)
 - Desktop screen recording (Windows, Linux XOrg)  
 
 ### **Supported Platforms and Operating Systems**  

@@ -202,8 +202,8 @@ namespace ConsoleAppDemo
 [https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos)  
 
 ## License  
-1. This software is licensed under the MIT open-source license.  
-2. This software uses FFmpeg (https://ffmpeg.org), which is protected under the LGPL/GPL license.  
+- This software is licensed under the MIT open-source license.  
+- This software uses FFmpeg (https://ffmpeg.org), which is protected under the LGPL/GPL license.  
 
 ## **Acknowledgments**  
 Special thanks to these great open-source projects:  

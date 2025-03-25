@@ -236,6 +236,10 @@ namespace ConsoleAppDemo
 ### 更多完整示例  
 [https://github.com/withsalt/BemfaCloud/tree/main/src/Examples](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos)
 
+## 许可  
+- 本软件使用MIT开源协议。  
+- 本软件使用了 FFmpeg（ https://ffmpeg.org ），FFmpeg 受 LGPL/GPL 许可证保护。  
+
 ## 致谢
 感谢这些伟大的开源项目。  
 - FFmpeg https://git.ffmpeg.org/gitweb/ffmpeg.git

@@ -96,8 +96,8 @@ namespace ConsoleAppDemo
             //await DesktopTest(frameChannel);
             //await RtspTest(frameChannel);
             //await RtmpTest(frameChannel);
-            await HttpHLSTest(frameChannel);
-
+            //await HttpTest(frameChannel, "http://192.168.188.22:5000/pe01.mkv");
+            await HttpTest(frameChannel, "http://192.168.188.1:10000/rtp/239.93.0.58:5140");
 
             Console.WriteLine("Done.");
         }
@@ -184,11 +184,11 @@ namespace ConsoleAppDemo
             await ffmpegCmd.ProcessAsynchronously();
         }
 
-        static async Task HttpHLSTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
+        static async Task HttpTest(Channel<(long frameIndex, SKBitmap data)> frameChannel, string uri)
         {
             FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithStreamInput()
-                .WithHttp("http://192.168.188.1:10000/rtp/239.93.0.58:5140")
+                .WithHttp(uri)
                 .WithTimeout(10)
                 .WithProbeSize(64 * 1024)
                 .WithImageHandle((frameIndex, bitmap) =>

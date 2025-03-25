@@ -216,6 +216,7 @@ namespace ConsoleAppDemo
             FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithStreamInput()
                 .WithRtmp("rtmp://192.168.188.22:1935/live/stream?user=admin&pass=oxV7PDo0CSpKMra7IXTmlx5Xo5KOeFsk")
+                .WithLiveType(RtmpLiveType.Live)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
                     if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))

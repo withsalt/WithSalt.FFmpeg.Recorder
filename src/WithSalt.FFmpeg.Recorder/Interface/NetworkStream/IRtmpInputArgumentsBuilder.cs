@@ -1,4 +1,5 @@
 ﻿using System;
+using WithSalt.FFmpeg.Recorder.Models;
 
 namespace WithSalt.FFmpeg.Recorder.Interface
 {
@@ -13,5 +14,12 @@ namespace WithSalt.FFmpeg.Recorder.Interface
         /// 默认参数为64字节，这个值非常小，在无法正确识别流的情况下，可以适当增大这个值
         /// </remarks>
         IRtmpInputArgumentsBuilder WithProbeSize(uint probeSize);
+
+        /// <summary>
+        /// 设置 RTMP 流的直播类型（可选）
+        /// </summary>
+        /// <param name="liveType"></param>
+        /// <returns></returns>
+        IRtmpInputArgumentsBuilder WithLiveType(RtmpLiveType liveType);
     }
 }

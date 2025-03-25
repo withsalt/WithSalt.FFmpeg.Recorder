@@ -5,6 +5,7 @@ using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
 using WithSalt.FFmpeg.Recorder.Interface;
+using WithSalt.FFmpeg.Recorder.Models;
 
 namespace WithSalt.FFmpeg.Recorder.Builder
 {
@@ -23,6 +24,24 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         public IRtmpInputArgumentsBuilder WithProbeSize(uint probeSize)
         {
             ResetProbeSize(_inputArgumentList, probeSize);
+            return this;
+        }
+
+        public IRtmpInputArgumentsBuilder WithLiveType(RtmpLiveType liveType)
+        {
+            switch (liveType)
+            {
+                default:
+                case RtmpLiveType.Any:
+                    _inputArgumentList.Add(new CustomArgument("-rtmp_live any"));
+                    break;
+                case RtmpLiveType.Live:
+                    _inputArgumentList.Add(new CustomArgument("-rtmp_live live"));
+                    break;
+                case RtmpLiveType.Recorded:
+                    _inputArgumentList.Add(new CustomArgument("-rtmp_live recorded"));
+                    break;
+            }
             return this;
         }
 

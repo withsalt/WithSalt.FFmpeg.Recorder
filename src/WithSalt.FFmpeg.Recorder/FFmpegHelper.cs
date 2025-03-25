@@ -120,7 +120,7 @@ namespace WithSalt.FFmpeg.Recorder
 
         private static string GetProcessArchitecturePath()
         {
-            string architecture = string.Empty;
+            string architecture;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 architecture = RuntimeInformation.ProcessArchitecture switch
@@ -128,6 +128,7 @@ namespace WithSalt.FFmpeg.Recorder
                     Architecture.X86 => "win-x86",
                     Architecture.X64 => "win-x64",
                     Architecture.Arm64 => "win-arm64",
+                    _ => string.Empty,
                 };
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
@@ -137,10 +138,10 @@ namespace WithSalt.FFmpeg.Recorder
                     Architecture.X64 => "linux-x64",
                     Architecture.Arm => "linux-arm",
                     Architecture.Arm64 => "linux-arm64",
-#if NET7_0_OR_GREATER
+#if NET8_0_OR_GREATER
                     Architecture.LoongArch64 => "linux-loongarch64",
 #endif
-                    _ => throw new PlatformNotSupportedException($"Unsupported processor architecture: {RuntimeInformation.ProcessArchitecture}"),
+                    _ => string.Empty,
                 };
             }
             else

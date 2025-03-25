@@ -95,8 +95,8 @@ namespace ConsoleAppDemo
             //await CameraTest(frameChannel);
             //await DesktopTest(frameChannel);
             //await RtspTest(frameChannel);
-            await RtmpTest(frameChannel);
-            //await HttpHLSTest(frameChannel);
+            //await RtmpTest(frameChannel);
+            await HttpHLSTest(frameChannel);
 
 
             Console.WriteLine("Done.");

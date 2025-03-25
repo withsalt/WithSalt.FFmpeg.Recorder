@@ -128,7 +128,6 @@ namespace WithSalt.FFmpeg.Recorder
                     Architecture.X86 => "win-x86",
                     Architecture.X64 => "win-x64",
                     Architecture.Arm64 => "win-arm64",
-                    _ => throw new PlatformNotSupportedException($"Unsupported processor architecture: {RuntimeInformation.ProcessArchitecture}"),
                 };
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
@@ -168,15 +167,20 @@ namespace WithSalt.FFmpeg.Recorder
         /// </remarks>
         private static string[] CreateDefaultSeachFolders()
         {
-            HashSet<string> folders = new HashSet<string>()
+            HashSet<string> folders = new HashSet<string>();
+
+            string processArchitecture = GetProcessArchitecturePath();
+            if (!string.IsNullOrWhiteSpace(processArchitecture))
             {
-                Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtimes", GetProcessArchitecturePath(), "bin")).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(Path.Combine(".", "runtimes", GetProcessArchitecturePath(), "bin")).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin")).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(Path.Combine(".", "bin")).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory)).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(Path.Combine(".")).TrimEnd(Path.DirectorySeparatorChar),
-            };
+                folders.Add(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtimes", GetProcessArchitecturePath(), "bin")).TrimEnd(Path.DirectorySeparatorChar));
+                folders.Add(Path.GetFullPath(Path.Combine(".", "runtimes", GetProcessArchitecturePath(), "bin")).TrimEnd(Path.DirectorySeparatorChar));
+            }
+
+            folders.Add(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin")).TrimEnd(Path.DirectorySeparatorChar));
+            folders.Add(Path.GetFullPath(Path.Combine(".", "bin")).TrimEnd(Path.DirectorySeparatorChar));
+            folders.Add(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory)).TrimEnd(Path.DirectorySeparatorChar));
+            folders.Add(Path.GetFullPath(Path.Combine(".")).TrimEnd(Path.DirectorySeparatorChar));
+
             return folders.ToArray();
         }
 

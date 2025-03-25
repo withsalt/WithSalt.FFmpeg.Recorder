@@ -23,7 +23,7 @@ namespace DesktopAppDemo
         public override void OnFrameworkInitializationCompleted()
         {
             //使用默认的ffmpeg加载器
-            FFmpegHelper.SetDefaultFFmpegLoador();
+            FFmpegHelper1.SetDefaultFFmpegLoador();
 
             HostApplicationBuilder builder = Host.CreateApplicationBuilder();
             //Logging

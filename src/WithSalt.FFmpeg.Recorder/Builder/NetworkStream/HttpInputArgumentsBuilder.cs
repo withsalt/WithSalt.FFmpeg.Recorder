@@ -24,20 +24,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
         public IHttpInputArgumentsBuilder WithProbeSize(uint probeSize)
         {
-            if (probeSize == 0)
-                return this;
-
-            if (_inputArgumentList.Count == 0)
-                return this;
-
-            for (int i = 0; i < _inputArgumentList.Count; i++)
-            {
-                if (_inputArgumentList[i].Text.StartsWith("-probesize", StringComparison.OrdinalIgnoreCase))
-                {
-                    _inputArgumentList[i] = new CustomArgument($"-probesize {probeSize}");
-                    return this;
-                }
-            }
+            ResetProbeSize(_inputArgumentList, probeSize);
             return this;
         }
 

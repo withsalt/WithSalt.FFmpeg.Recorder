@@ -8,7 +8,7 @@ using FFMpegCore;
 
 namespace WithSalt.FFmpeg.Recorder
 {
-    public class FFmpegHelper
+    public class FFmpegHelper1
     {
         private static string[] _defaultSeachFolders = CreateDefaultSeachFolders();
 

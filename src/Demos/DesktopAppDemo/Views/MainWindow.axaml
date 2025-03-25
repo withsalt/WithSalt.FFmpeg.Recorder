@@ -117,10 +117,10 @@
                                   IsVisible="{Binding IsShowCamera}"/>
 
 						<!-- RTSP源设置 -->
-						<TextBlock Margin="0,8,0,8" IsVisible="{Binding IsShowRtspSource}">RTSP源</TextBlock>
-						<TextBox Text="{Binding RtspSource}"
+						<TextBlock Margin="0,8,0,8" IsVisible="{Binding IsShowStreamSource}">网络流地址</TextBlock>
+						<TextBox Text="{Binding StreamSource}"
                                  HorizontalAlignment="Stretch"
-                                 IsVisible="{Binding IsShowRtspSource}"
+                                 IsVisible="{Binding IsShowStreamSource}"
                                  IsEnabled="{Binding !IsRunning}"/>
 
 						<!-- 录制桌面设置 -->

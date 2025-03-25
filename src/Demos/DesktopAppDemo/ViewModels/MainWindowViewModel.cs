@@ -65,7 +65,7 @@ namespace DesktopAppDemo.ViewModels
         public ObservableCollection<InputTypeItem> InputTypeList { get; } = new ObservableCollection<InputTypeItem>()
         {
             new InputTypeItem(1, "摄像头"),
-            new InputTypeItem(2, "RTSP流"),
+            new InputTypeItem(2, "网络流"),
             new InputTypeItem(3, "桌面"),
             new InputTypeItem(4, "视频文件"),
         };
@@ -110,7 +110,7 @@ namespace DesktopAppDemo.ViewModels
                     default:
                     case 1: //摄像头
                         {
-                            IsShowRtspSource = false;
+                            IsShowStreamSource = false;
                             IsShowCamera = true;
                             IsShowDesktopSource = false;
                             IsShowFilesSource = false;
@@ -118,10 +118,10 @@ namespace DesktopAppDemo.ViewModels
                             InitCameraDeviceList();
                         }
                         break;
-                    case 2: //RTSP流
+                    case 2: //网络流
                         {
                             IsShowCamera = false;
-                            IsShowRtspSource = true;
+                            IsShowStreamSource = true;
                             IsShowDesktopSource = false;
                             IsShowFilesSource = false;
                         }
@@ -129,7 +129,7 @@ namespace DesktopAppDemo.ViewModels
                     case 3:  //桌面录制
                         {
                             IsShowCamera = false;
-                            IsShowRtspSource = false;
+                            IsShowStreamSource = false;
                             IsShowDesktopSource = true;
                             IsShowFilesSource = false;
                         }
@@ -137,7 +137,7 @@ namespace DesktopAppDemo.ViewModels
                     case 4:  //视频文件
                         {
                             IsShowCamera = false;
-                            IsShowRtspSource = false;
+                            IsShowStreamSource = false;
                             IsShowDesktopSource = false;
                             IsShowFilesSource = true;
                         }
@@ -194,22 +194,22 @@ namespace DesktopAppDemo.ViewModels
 
         #endregion
 
-        #region RTSP
+        #region 网络流
 
-        private bool _isShowRtspSource = false;
+        private bool _isShowStreamSource = false;
 
-        public bool IsShowRtspSource
+        public bool IsShowStreamSource
         {
-            get => _isShowRtspSource;
-            set => SetProperty(ref _isShowRtspSource, value);
+            get => _isShowStreamSource;
+            set => SetProperty(ref _isShowStreamSource, value);
         }
 
-        private string _rtspSource = string.Empty;
+        private string _streamSource = string.Empty;
 
-        public string RtspSource
+        public string StreamSource
         {
-            get => _rtspSource;
-            set => this.SetProperty(ref _rtspSource, value);
+            get => _streamSource;
+            set => this.SetProperty(ref _streamSource, value);
         }
 
         #endregion
@@ -397,9 +397,9 @@ namespace DesktopAppDemo.ViewModels
                         return;
                     }
 
-                    if (InputType?.Id == 2 && string.IsNullOrWhiteSpace(RtspSource))
+                    if (InputType?.Id == 2 && string.IsNullOrWhiteSpace(StreamSource))
                     {
-                        await MessageBox.Warning("错误", "RTSP地址无效");
+                        await MessageBox.Warning("错误", "网络流地址无效");
                         return;
                     }
 
@@ -442,7 +442,7 @@ namespace DesktopAppDemo.ViewModels
                 _currentProcessor = InputType?.Id switch
                 {
                     1 => BuildCameraProcessor(),
-                    2 => BuildRtspProcessor(),
+                    2 => BuildStreamProcessor(),
                     3 => BuildDesktopProcessor(),
                     4 => BuildFilesProcessor(),
                     _ => throw new InvalidOperationException("未知输入类型")
@@ -708,13 +708,13 @@ namespace DesktopAppDemo.ViewModels
             return args;
         }
 
-        private FFMpegArgumentProcessor BuildRtspProcessor()
+        private FFMpegArgumentProcessor BuildStreamProcessor()
         {
             (int width, int height) = ParseResolution();
 
-            if (!Uri.TryCreate(RtspSource, UriKind.Absolute, out Uri? uri))
+            if (!Uri.TryCreate(StreamSource, UriKind.Absolute, out Uri? uri))
             {
-                throw new ArgumentException(nameof(RtspSource), "Invalid URI.");
+                throw new ArgumentException(nameof(StreamSource), "Invalid URI.");
             }
 
             if (uri.Scheme.StartsWith("rtsp", StringComparison.OrdinalIgnoreCase))
@@ -748,7 +748,6 @@ namespace DesktopAppDemo.ViewModels
                 FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
                     .WithStreamInput()
                     .WithRtmp(uri)
-                    .WithTimeout(3)
                     .WithImageHandle(OnImageArrived)
                     .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                     .WithOutputSize(width, height)

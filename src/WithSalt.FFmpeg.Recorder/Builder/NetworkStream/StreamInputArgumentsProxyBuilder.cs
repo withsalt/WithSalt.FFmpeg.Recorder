@@ -32,7 +32,7 @@ namespace WithSalt.FFmpeg.Recorder.Interface
 
         public IHttpInputArgumentsBuilder WithHttp(Uri uri)
         {
-            if (!uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase))
+            if (!uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase) && !uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
             {
                 throw new ArgumentException(nameof(uri), "Invalid URI. Your input uri is not a http stream.");
             }

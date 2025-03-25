@@ -1,7 +1,8 @@
 ﻿using System;
 using WithSalt.FFmpeg.Recorder.Builder;
+using WithSalt.FFmpeg.Recorder.Interface.StreamInputs;
 
-namespace WithSalt.FFmpeg.Recorder.Interface
+namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
 {
     internal class StreamInputArgumentsProxyBuilder : IStreamInputArgumentsProxyBuilder
     {

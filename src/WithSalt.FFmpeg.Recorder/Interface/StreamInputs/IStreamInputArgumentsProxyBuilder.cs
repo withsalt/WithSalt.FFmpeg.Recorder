@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace WithSalt.FFmpeg.Recorder.Interface
+namespace WithSalt.FFmpeg.Recorder.Interface.StreamInputs
 {
     public interface IStreamInputArgumentsProxyBuilder
     {

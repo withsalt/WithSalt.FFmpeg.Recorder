@@ -4,9 +4,9 @@ using System.Linq;
 using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
-using WithSalt.FFmpeg.Recorder.Interface;
+using WithSalt.FFmpeg.Recorder.Interface.StreamInputs;
 
-namespace WithSalt.FFmpeg.Recorder.Builder
+namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
 {
     internal class RtspInputArgumentsBuilder : BaseStreamInputArgumentsBuilder, IRtspInputArgumentsBuilder
     {

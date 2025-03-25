@@ -1,7 +1,7 @@
 ﻿using System;
 using WithSalt.FFmpeg.Recorder.Models;
 
-namespace WithSalt.FFmpeg.Recorder.Interface
+namespace WithSalt.FFmpeg.Recorder.Interface.StreamInputs
 {
     public interface IRtmpInputArgumentsBuilder : IFFmpegArgumentsBuilder
     {

@@ -1,4 +1,6 @@
-﻿namespace WithSalt.FFmpeg.Recorder.Interface
+﻿using WithSalt.FFmpeg.Recorder.Interface.StreamInputs;
+
+namespace WithSalt.FFmpeg.Recorder.Interface
 {
     public interface IFFmpegInputArgumentsBuilder
     {

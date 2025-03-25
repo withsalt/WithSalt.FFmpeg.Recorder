@@ -1,19 +1,15 @@
 ﻿using System;
 
-namespace WithSalt.FFmpeg.Recorder.Interface
+namespace WithSalt.FFmpeg.Recorder.Interface.StreamInputs
 {
-    public interface IRtspInputArgumentsBuilder : IFFmpegArgumentsBuilder
+    public interface IHttpInputArgumentsBuilder : IFFmpegArgumentsBuilder
     {
-        IRtspInputArgumentsBuilder WithTcp();
-
-        IRtspInputArgumentsBuilder WithUdp();
-
         /// <summary>
         /// 网络连接超时设置，单位：秒
         /// </summary>
         /// <param name="timeout"></param>
         /// <returns></returns>
-        IRtspInputArgumentsBuilder WithTimeout(uint timeout = 3);
+        IHttpInputArgumentsBuilder WithTimeout(uint timeout = 3);
 
         /// <summary>
         /// 控制 FFmpeg 在分析输入流时读取的初始数据量参数，单位：字节
@@ -23,6 +19,6 @@ namespace WithSalt.FFmpeg.Recorder.Interface
         /// <remarks>
         /// 默认参数为64字节，这个值非常小，在无法正确识别流的情况下，可以适当增大这个值
         /// </remarks>
-        IRtspInputArgumentsBuilder WithProbeSize(uint probeSize);
+        IHttpInputArgumentsBuilder WithProbeSize(uint probeSize);
     }
 }

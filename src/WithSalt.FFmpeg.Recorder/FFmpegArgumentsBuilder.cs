@@ -1,5 +1,7 @@
 ﻿using WithSalt.FFmpeg.Recorder.Builder;
+using WithSalt.FFmpeg.Recorder.Builder.StreamInputs;
 using WithSalt.FFmpeg.Recorder.Interface;
+using WithSalt.FFmpeg.Recorder.Interface.StreamInputs;
 
 namespace WithSalt.FFmpeg.Recorder
 {

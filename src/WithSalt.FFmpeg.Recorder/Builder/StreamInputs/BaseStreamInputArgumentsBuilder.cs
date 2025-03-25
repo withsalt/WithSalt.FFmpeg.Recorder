@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using FFMpegCore.Arguments;
 
-namespace WithSalt.FFmpeg.Recorder.Builder
+namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
 {
     internal abstract class BaseStreamInputArgumentsBuilder : BaseInputArgumentsBuilder
     {
@@ -13,7 +13,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         {
             if (uri == null)
                 throw new ArgumentNullException(nameof(uri), "The parameter uri cannot be empty.");
-            this._uri = uri;
+            _uri = uri;
         }
 
         protected void ResetProbeSize(List<IArgument> inputArgumentList, uint probeSize)

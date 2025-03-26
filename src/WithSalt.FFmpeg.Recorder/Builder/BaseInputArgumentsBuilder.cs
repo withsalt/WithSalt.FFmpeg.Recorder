@@ -9,6 +9,7 @@ using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Pipes;
 using SkiaSharp;
+using WithSalt.FFmpeg.Recorder.Builder.Providers;
 using WithSalt.FFmpeg.Recorder.Interface;
 using WithSalt.FFmpeg.Recorder.Models;
 
@@ -20,7 +21,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
         protected List<IArgument> _outputArgumentList = new List<IArgument>();
         protected List<IArgument> _filterArgumentList = new List<IArgument>();
-        protected List<IArgument> _lowDelayArguments = new List<IArgument>();
+        protected LatencyOptimizationContainer _latencyOptimizationContainer = new LatencyOptimizationContainer();
 
         private Action<long, SKBitmap>? _imageProcessHandle;
 
@@ -172,48 +173,14 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             return this;
         }
 
-        public IFFmpegArgumentsBuilder WithoutLowDelayArguments()
+        public IFFmpegArgumentsBuilder WithLatencyOptimizationLevel(LatencyOptimizationLevel level)
         {
-            _lowDelayArguments.Clear();
-            return this;
-        }
-
-        /// <summary>
-        /// 创建低延迟参数组合
-        /// </summary>
-        /// <param name="probeSize">值的大小影响输入流探测行为</param>
-        /// <returns></returns>
-        protected List<IArgument> CreateLowDelayArguments(uint probeSize = 64)
-        {
-            List<IArgument> arguments = new List<IArgument>()
+            if (!Enum.IsDefined(typeof(LatencyOptimizationLevel), (int)level))
             {
-                //=======================================================================================
-                //以下参数谨慎启用，错误的参数可能导致无法正常工作
-                //=======================================================================================
-
-                //禁用输入流的缓冲机制，避免数据在内存中堆积，实现实时处理 + 丢弃损坏的包
-                new CustomArgument("-fflags nobuffer+discardcorrupt"),
-
-                //启用全局低延迟模式，强制解码器 / 复用器优先处理时效性
-                new CustomArgument("-flags low_delay"),
-
-                //允许低延迟参数组合
-                new CustomArgument($"-strict experimental"),
-
-                //控制输入 / 输出线程间数据队列缓冲大小的关键参数，直接影响实时流处理的延迟和稳定性
-                //队列越大：能缓冲更多数据，抗突发流量波动能力越强，但内存占用高、延迟增加；队列越小：实时性更好、内存占用低，但容易因处理不及时导致丢帧或错误
-                new CustomArgument($"-thread_queue_size 1MB"),
-
-                //控制输入流探测行为的关键参数，其作用直接影响流的初始化和延迟表现
-                //默认值较高（几 MB）：FFmpeg 会读取较多数据确保格式正确，但导致初始延迟增加
-                //设为较小值（如 - probesize 64）：强制 FFmpeg 快速决策，跳过深度探测，显著降低初始延迟
-                new CustomArgument($"-probesize {probeSize}"),
-
-                //禁用格式探测延迟
-                new CustomArgument("-analyzeduration 0"),
-            };
-
-            return arguments;
+                level = LatencyOptimizationLevel.None;
+            }
+            this._latencyOptimizationContainer.SetLevel(level);
+            return this;
         }
 
         public async Task ProcessStream(Stream input, CancellationToken cancellationToken)

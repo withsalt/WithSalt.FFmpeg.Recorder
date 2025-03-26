@@ -14,11 +14,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
 
         public HttpInputArgumentsBuilder(Uri uri) : base(uri)
         {
-            List<IArgument> lowDelayArguments = CreateLowDelayArguments(probeSize: 128);
-            //直接访问输入数据（绕过缓存层），减少内存拷贝带来的延迟
-            lowDelayArguments.Add(new CustomArgument("-avioflags direct"));
-            _lowDelayArguments.AddRange(lowDelayArguments);
-
             _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
         }
 
@@ -44,7 +39,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
             _arguments = FFMpegArguments
                .FromUrlInput(_uri, opt =>
                {
-                   foreach (var argument in _lowDelayArguments)
+                   foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
                    {
                        opt.WithArgument(argument);
                    }

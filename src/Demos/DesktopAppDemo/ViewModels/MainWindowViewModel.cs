@@ -739,6 +739,7 @@ namespace DesktopAppDemo.ViewModels
                     .WithImageHandle(OnImageArrived)
                     .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                     .WithOutputSize(width, height)
+                    .WithLatencyOptimizationLevel(LatencyOptimizationLevel.Medium)
                     .Build()
                     .CancellableThrough(out _cancel);
                 return args;
@@ -751,6 +752,7 @@ namespace DesktopAppDemo.ViewModels
                     .WithImageHandle(OnImageArrived)
                     .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                     .WithOutputSize(width, height)
+                    .WithLatencyOptimizationLevel(LatencyOptimizationLevel.Medium)
                     .Build()
                     .CancellableThrough(out _cancel);
                 return args;
@@ -769,7 +771,7 @@ namespace DesktopAppDemo.ViewModels
 
             FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
                 .WithDesktopInput()
-                .WithRectangle(new SKRect(rectangle.Value.X, rectangle.Value.Y, rectangle.Value.Width, rectangle.Value.Height))
+                .WithRectangle(rectangle.Value)
                 .WithFramerate(60)
                 .WithImageHandle(OnImageArrived)
                 .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)

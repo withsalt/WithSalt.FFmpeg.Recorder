@@ -94,10 +94,11 @@ namespace ConsoleAppDemo
             //await FilesTest(frameChannel);
             //await CameraTest(frameChannel);
             //await DesktopTest(frameChannel);
-            //await RtspTest(frameChannel);
+            await RtspTest(frameChannel);
             //await RtmpTest(frameChannel);
             //await HttpTest(frameChannel, "http://192.168.188.22:5000/pe01.mkv");
-            await HttpTest(frameChannel, "http://192.168.188.1:10000/rtp/239.93.0.58:5140");
+            //await HttpTest(frameChannel, "http://192.168.188.1:10000/rtp/239.93.0.58:5140");
+            //await HttpTest(frameChannel, "https://d1--cn-gotcha07.bilivideo.com/live-bvc/215313/live_453064938_66485671.flv?expires=1743002728&len=0&oi=0x240e03990ea05630f9b5d313d99dc9d5&pt=web&qn=10000&trid=10003b5e219240f2e5612ebbde8a0267e40e&sigparams=cdn,expires,len,oi,pt,qn,trid&cdn=cn-gotcha07&sign=0a7b02f30780519c66d69d3230ecd707&site=33cf69dfe5ed72b532eea3cd28860dff&free_type=0&mid=0&sche=ban&trace=16&isp=ct&rg=SouthWest&pv=Sichuan&info_source=origin&sk=28fa386efcf76f3b1161ace8c290a776&source=puv3_onetier&sl=1&score=1&hot_cdn=0&p2p_type=1&origin_bitrate=473251&suffix=origin&deploy_env=prod&pp=rtmp&vd=bc&src=puv3&order=2");
 
             Console.WriteLine("Done.");
         }
@@ -132,7 +133,7 @@ namespace ConsoleAppDemo
 
         static async Task DesktopTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-            FFMpegArgumentProcessor ffmpegCmd = new WithSalt.FFmpeg.Recorder.FFmpegArgumentsBuilder()
+            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithDesktopInput()
                 .WithRectangle(new SKRect(0, 0, 1920, 1080))
                 .WithFramerate(60)

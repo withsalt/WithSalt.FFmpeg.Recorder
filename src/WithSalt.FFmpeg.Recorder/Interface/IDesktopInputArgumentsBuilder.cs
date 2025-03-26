@@ -14,7 +14,7 @@ namespace WithSalt.FFmpeg.Recorder.Interface
         /// <summary>
         /// 录制区域
         /// </summary>
-        /// <param name="rectangle">基于左上角的x坐标，y坐标，宽度，高度</param>
+        /// <param name="rectangle">基于左上角的right, bottom, left, top</param>
         /// <returns></returns>
         IDesktopInputArgumentsBuilder WithRectangle(SKRect rectangle);
     }

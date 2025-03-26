@@ -5,6 +5,7 @@ using FFMpegCore;
 using FFMpegCore.Arguments;
 using FFMpegCore.Enums;
 using WithSalt.FFmpeg.Recorder.Interface.StreamInputs;
+using WithSalt.FFmpeg.Recorder.Models;
 
 namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
 {
@@ -14,14 +15,10 @@ namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
 
         public RtspInputArgumentsBuilder(Uri uri) : base(uri)
         {
-            List<IArgument> lowDelayArguments = CreateLowDelayArguments(probeSize: 128);
             //禁用包重排序
-            lowDelayArguments.Add(new CustomArgument("-reorder_queue_size 0"));
+            _latencyOptimizationContainer.Container[LatencyOptimizationLevel.High].Add(new CustomArgument("-reorder_queue_size 0"));
             //减小接收缓冲区
-            lowDelayArguments.Add(new CustomArgument("-buffer_size 8192"));
-            //直接访问输入数据（绕过缓存层），减少内存拷贝带来的延迟
-            lowDelayArguments.Add(new CustomArgument("-avioflags direct"));
-            _lowDelayArguments.AddRange(lowDelayArguments);
+            _latencyOptimizationContainer.Container[LatencyOptimizationLevel.High].Add(new CustomArgument("-buffer_size 8192"));
 
             _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
         }
@@ -77,7 +74,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
             _arguments = FFMpegArguments
                .FromUrlInput(_uri, opt =>
                {
-                   foreach (var argument in _lowDelayArguments)
+                   foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
                    {
                        opt.WithArgument(argument);
                    }

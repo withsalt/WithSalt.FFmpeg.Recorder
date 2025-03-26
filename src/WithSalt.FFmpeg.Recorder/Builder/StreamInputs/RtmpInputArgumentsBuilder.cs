@@ -15,9 +15,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
 
         public RtmpInputArgumentsBuilder(Uri uri) : base(uri)
         {
-            List<IArgument> lowDelayArguments = CreateLowDelayArguments(probeSize: 128);
-            _lowDelayArguments.AddRange(lowDelayArguments);
-
             _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
         }
 
@@ -52,7 +49,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
             _arguments = FFMpegArguments
                .FromUrlInput(_uri, opt =>
                {
-                   foreach (var argument in _lowDelayArguments)
+                   foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
                    {
                        opt.WithArgument(argument);
                    }

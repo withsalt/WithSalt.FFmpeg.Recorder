@@ -24,12 +24,15 @@ namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
             if (inputArgumentList.Count == 0)
                 return;
 
-            for (int i = 0; i < inputArgumentList.Count; i++)
+            foreach (var item in this._latencyOptimizationContainer.Container)
             {
-                if (inputArgumentList[i].Text.StartsWith("-probesize", StringComparison.OrdinalIgnoreCase))
+                for (int i = 0; i < item.Value.Count; i++)
                 {
-                    inputArgumentList[i] = new CustomArgument($"-probesize {probeSize}");
-                    return;
+                    if (item.Value[i].Text.StartsWith("-probesize", StringComparison.OrdinalIgnoreCase))
+                    {
+                        item.Value[i] = new CustomArgument($"-probesize {probeSize}");
+                        continue;
+                    }
                 }
             }
             return;

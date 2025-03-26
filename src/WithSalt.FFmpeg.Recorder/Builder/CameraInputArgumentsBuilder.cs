@@ -14,7 +14,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         private List<IArgument> _inputArgumentList = new List<IArgument>();
         public CameraInputArgumentsBuilder()
         {
-            _inputArgumentList.AddRange(CreateLowDelayArguments(64));
             _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -23,7 +22,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                 _inputArgumentList.Add(new ForceFormatArgument("v4l2"));
             else
                 throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
-
         }
 
         private string _deviceName = string.Empty;
@@ -68,7 +66,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             _arguments = FFMpegArguments
                .FromDeviceInput(this._deviceName, opt =>
                {
-                   foreach (var argument in _lowDelayArguments)
+                   foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
                    {
                        opt.WithArgument(argument);
                    }

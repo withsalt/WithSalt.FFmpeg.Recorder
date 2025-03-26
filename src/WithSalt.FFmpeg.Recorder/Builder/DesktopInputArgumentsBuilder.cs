@@ -14,7 +14,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         private List<IArgument> _inputArgumentList = new List<IArgument>();
         public DesktopInputArgumentsBuilder()
         {
-            _inputArgumentList.AddRange(CreateLowDelayArguments());
             _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -35,21 +34,26 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
         public IDesktopInputArgumentsBuilder WithRectangle(SKRect rectangle)
         {
+            if (rectangle.Size.Width < 0 || rectangle.Size.Height < 0)
+            {
+                throw new ArgumentException("Invalid rectangle size");
+            }
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                _inputArgumentList.Add(new CustomArgument($"-offset_x {rectangle.Left}"));
-                _inputArgumentList.Add(new CustomArgument($"-offset_y {rectangle.Top}"));
-                if (rectangle.Right > 0 && rectangle.Bottom > 0)
+                _inputArgumentList.Add(new CustomArgument($"-offset_x {rectangle.Location.X}"));
+                _inputArgumentList.Add(new CustomArgument($"-offset_y {rectangle.Location.Y}"));
+                if (rectangle.Size.Width > 0 && rectangle.Size.Height > 0)
                 {
-                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Right}x{rectangle.Bottom}"));
+                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Size.Width}x{rectangle.Size.Height}"));
                 }
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                inputPath = $":0.0+{rectangle.Left},{rectangle.Top}";
-                if (rectangle.Width > 0 && rectangle.Height > 0)
+                inputPath = $":0.0+{rectangle.Location.X},{rectangle.Location.Y}";
+                if (rectangle.Size.Width > 0 && rectangle.Size.Height > 0)
                 {
-                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Width}x{rectangle.Height}"));
+                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Size.Width}x{rectangle.Size.Height}"));
                 }
             }
             else
@@ -65,6 +69,10 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             {
                 _arguments = FFMpegArguments.FromFileInput("desktop", false, opt =>
                 {
+                    foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
+                    {
+                        opt.WithArgument(argument);
+                    }
                     foreach (var argument in _inputArgumentList)
                     {
                         opt.WithArgument(argument);
@@ -76,7 +84,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                 string path = !string.IsNullOrWhiteSpace(inputPath) ? inputPath : ":0.0";
                 _arguments = FFMpegArguments.FromFileInput(path, false, opt =>
                 {
-                    foreach (var argument in _lowDelayArguments)
+                    foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
                     {
                         opt.WithArgument(argument);
                     }

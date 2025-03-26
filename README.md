@@ -86,13 +86,10 @@ FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
 以下是录制屏幕的完整demo  
 ```
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using FFMpegCore;
-using FlashCap;
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder;
-using WithSalt.FFmpeg.Recorder.Interface;
 using WithSalt.FFmpeg.Recorder.Models;
 
 namespace ConsoleAppDemo
@@ -173,13 +170,14 @@ namespace ConsoleAppDemo
             });
 
             await DesktopTest(frameChannel);
-
             Console.WriteLine("Done.");
         }
 
+        private static Action? _cancel = null;
+
         static async Task DesktopTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-            FFMpegArgumentProcessor ffmpegCmd = new WithSalt.FFmpeg.Recorder.FFmpegArgumentsBuilder()
+            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithDesktopInput()
                 .WithRectangle(new SKRect(0, 0, 0, 0))
                 .WithFramerate(60)
@@ -192,6 +190,7 @@ namespace ConsoleAppDemo
                 })
                 .WithOutputQuality(OutputQuality.Medium)
                 .Build()
+                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
 
@@ -219,8 +218,6 @@ namespace ConsoleAppDemo
             {
                 data.SaveTo(stream);
             }
-
-            bitmap.Dispose();
         }
     }
 }

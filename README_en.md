@@ -160,7 +160,7 @@ namespace ConsoleAppDemo
         {
             FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithDesktopInput()
-                .WithRectangle(new SKRect(0, 0, 1920, 1080))
+                .WithRectangle(new SKRect(0, 0, 0, 0))
                 .WithFramerate(60)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
@@ -179,14 +179,15 @@ namespace ConsoleAppDemo
 
         static void SaveBitmapAsImage(SKBitmap bitmap, string filePath, SKEncodedImageFormat imageFormat, int quality)
         {
+            if (bitmap == null)
+                throw new ArgumentNullException(nameof(bitmap));
+
             using (SKImage image = SKImage.FromBitmap(bitmap))
             using (SKData data = image.Encode(imageFormat, quality))
             using (FileStream stream = File.OpenWrite(filePath))
             {
                 data.SaveTo(stream);
             }
-
-            bitmap.Dispose();
         }
     }
 }

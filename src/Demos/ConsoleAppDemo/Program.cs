@@ -93,8 +93,8 @@ namespace ConsoleAppDemo
 
             //await FilesTest(frameChannel);
             //await CameraTest(frameChannel);
-            //await DesktopTest(frameChannel);
-            await RtspTest(frameChannel);
+            await DesktopTest(frameChannel);
+            //await RtspTest(frameChannel);
             //await RtmpTest(frameChannel);
             //await HttpTest(frameChannel, "http://192.168.188.22:5000/pe01.mkv");
             //await HttpTest(frameChannel, "http://192.168.188.1:10000/rtp/239.93.0.58:5140");
@@ -135,7 +135,7 @@ namespace ConsoleAppDemo
         {
             FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithDesktopInput()
-                .WithRectangle(new SKRect(0, 0, 1920, 1080))
+                .WithRectangle(SKRect.Create(new SKPoint(0, 0), new SKSize(1280, 720)))
                 .WithFramerate(60)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
@@ -146,7 +146,7 @@ namespace ConsoleAppDemo
                         bitmap.Dispose();
                     }
                 })
-                .WithOutputQuality(OutputQuality.High)
+                .WithOutputQuality(OutputQuality.Medium)
                 .Build()
                 .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))

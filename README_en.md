@@ -1,6 +1,6 @@
 # WithSalt.FFMpeg.Recorder  
 
-A high-performance video recording framework based on FFmpeg, supporting the processing of various input sources (local videos, cameras, network streams, desktop, etc.) into continuous image frames. 
+A high-performance video recording framework based on FFmpeg, which supports extracting continuous image frames from various input sources (local videos, cameras, network streams, desktops, etc.).
 
 ## Core Features  
 

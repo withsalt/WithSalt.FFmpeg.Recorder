@@ -1,5 +1,5 @@
 # WithSalt.FFMpeg.Recorder  
-基于FFmpeg实现的高性能视频录制框架，支持将多种输入源（本地视频、摄像头、网络流、桌面等）处理为连续的图像帧。  
+基于FFmpeg实现的高性能视频录制框架，支持从多种输入源（本地视频、摄像头、网络流、桌面等）中提取连续的图像帧。  
 
 [View English](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/blob/main/README_en.md)  
 

@@ -13,12 +13,19 @@ namespace WithSalt.FFmpeg.Recorder.Interface
 
         IFFmpegArgumentsBuilder WithOutputFramerate(double framerate = 30);
 
+        /// <summary>
+        /// 设置输出视频的帧率模式
+        /// </summary>
+        /// <param name="fpsMode"></param>
+        /// <returns></returns>
+        IFFmpegArgumentsBuilder WithFpsMode(FpsMode fpsMode = FpsMode.Passthrough);
+
         IFFmpegArgumentsBuilder WithOutputQuality(OutputQuality quality = OutputQuality.Medium);
 
         IFFmpegArgumentsBuilder WithOutputSize(int width, int height);
 
         /// <summary>
-        /// 禁用低延迟参数优化
+        /// 设置低延迟参数优化级别
         /// </summary>
         /// <returns></returns>
         /// <remarks>

@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FFMpegCore;
@@ -24,6 +25,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         protected LatencyOptimizationContainer _latencyOptimizationContainer = new LatencyOptimizationContainer();
 
         private Action<long, SKBitmap>? _imageProcessHandle;
+        private Dictionary<string, bool> _requiredParameterCalls = new Dictionary<string, bool>();
 
         private OutputQuality OutputQuality = OutputQuality.Medium;
 
@@ -39,23 +41,16 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             {
                 throw new ArgumentNullException("FFmpegArguments", "Please set input parameters at first.");
             }
-            if (!isCallWithOutputQuality)
+            if (!_requiredParameterCalls.ContainsKey(nameof(WithOutputQuality)))
             {
                 this.WithOutputQuality(OutputQuality.Medium);
             }
-            if (!isCallWithOutputFramerate)
-            {
-                this.WithOutputFramerate(-1);
-            }
 
-            //用于控制是否在每个数据包（packet）写入时刷新（flush）缓冲区，1=启用（默认），每个数据包都会刷新缓冲区，减少延迟。
-            _outputArgumentList.Add(new CustomArgument("-flush_packets 1"));
+            //校验帧率模式
+            FpsModeParametersVerify();
 
-            //以下参数用于时间戳(DTS)相关的错误，导致编码器无法正常处理视频帧
-            //应用于输入流,为缺失或损坏的PTS(Presentation Time Stamp)生成新的时间戳，但尽量保留原始时间戳的相对关系
-            //_outputArgumentList.Add(new CustomArgument("-fflags +genpts"));
-            //应用于输出流,完全重置输出流的时间戳，使其从0开始，不考虑输入流的原始时间戳
-            _outputArgumentList.Add(new CustomArgument("-reset_timestamps 1"));
+            //添加时间戳参数
+            AddPTSParameters();
 
             FFMpegArgumentProcessor processor = _arguments
                 .OutputToPipe(new StreamPipeSink(ProcessStream), options =>
@@ -80,8 +75,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                 });
             return processor;
         }
-
-        private bool isCallWithOutputQuality = false;
 
         /// <summary>
         /// 输出质量控制，一般选择中等就行了
@@ -115,8 +108,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             }
             finally
             {
-
-                isCallWithOutputQuality = true;
+                _requiredParameterCalls[nameof(WithOutputQuality)] = true;
             }
             return this;
         }
@@ -135,7 +127,38 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             return this;
         }
 
-        private bool isCallWithOutputFramerate = false;
+        /// <summary>
+        /// 用于控制帧率处理模式
+        /// </summary>
+        /// <param name="fpsMode"></param>
+        /// <returns></returns>
+        public IFFmpegArgumentsBuilder WithFpsMode(FpsMode fpsMode = FpsMode.Passthrough)
+        {
+            try
+            {
+                switch (fpsMode)
+                {
+                    default:
+                    case FpsMode.Passthrough:
+                        //不处理帧率，直接传递原始时间戳
+                        _outputArgumentList.Add(FpsModeArguments.Passthrough);
+                        break;
+                    case FpsMode.VFR:
+                        //根据输入帧的时间戳动态调整输出帧率 (Variable Frame Rate)
+                        _outputArgumentList.Add(FpsModeArguments.VFR);
+                        break;
+                    case FpsMode.CFR:
+                        //输出帧率为恒定帧率(Constant Frame Rate),如果输入帧率不稳定，FFmpeg 会通过丢弃或重复帧来强制输出为恒定帧率。
+                        _outputArgumentList.Add(FpsModeArguments.CFR);
+                        break;
+                }
+            }
+            finally
+            {
+                _requiredParameterCalls[nameof(WithFpsMode)] = true;
+            }
+            return this;
+        }
 
         /// <summary>
         /// 输出帧数控制
@@ -146,23 +169,15 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         {
             try
             {
-                if (framerate == -1)
-                {
-                    //不处理帧率，直接传递原始时间戳
-                    _outputArgumentList.Add(new CustomArgument("-fps_mode passthrough"));
-                    return this;
-                }
-                if (framerate < 0)
+                if (framerate <= 0)
                 {
                     throw new ArgumentOutOfRangeException(nameof(framerate), "Invalid framerate.");
                 }
-
                 _outputArgumentList.Add(new FrameRateArgument(framerate));
-                _outputArgumentList.Add(new CustomArgument("-fps_mode cfr"));
             }
             finally
             {
-                isCallWithOutputFramerate = true;
+                _requiredParameterCalls[nameof(WithOutputFramerate)] = true;
             }
             return this;
         }
@@ -183,7 +198,53 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             return this;
         }
 
-        public async Task ProcessStream(Stream input, CancellationToken cancellationToken)
+        #region Private
+
+        private void FpsModeParametersVerify()
+        {
+            bool isCallWithFpsMode = _requiredParameterCalls.ContainsKey(nameof(WithFpsMode));
+            bool isCallWithOutputFramerate = _requiredParameterCalls.ContainsKey(nameof(WithOutputFramerate));
+
+            //校验FpsModel
+            if (_outputArgumentList.Any(p => p == FpsModeArguments.CFR) && !isCallWithOutputFramerate)
+            {
+                throw new ArgumentException("When the fps mode is set to Constant Frame Rate (CFR), it is required to call WithOutputFramerate to specify the output frame rate.");
+            }
+            if (isCallWithOutputFramerate)
+            {
+                if (_outputArgumentList.Any(p => p == FpsModeArguments.VFR))
+                {
+                    throw new ArgumentException("When the fps mode is set to Variable Frame Rate (VFR), the output frame rate cannot be specified.");
+                }
+                if (_outputArgumentList.Any(p => p == FpsModeArguments.Passthrough))
+                {
+                    throw new ArgumentException("When the fps mode is set to Passthrough, the output frame rate cannot be specified.");
+                }
+            }
+
+            if (!isCallWithFpsMode && isCallWithOutputFramerate)
+            {
+                this.WithFpsMode(FpsMode.CFR);
+            }
+            else if (!isCallWithFpsMode && !isCallWithOutputFramerate)
+            {
+                this.WithFpsMode(FpsMode.Passthrough);
+            }
+        }
+
+        private void AddPTSParameters()
+        {
+            //用于控制是否在每个数据包（packet）写入时刷新（flush）缓冲区，1=启用（默认），每个数据包都会刷新缓冲区，减少延迟。
+            _outputArgumentList.Add(new CustomArgument("-flush_packets 1"));
+
+            //以下参数用于时间戳(DTS)相关的错误，导致编码器无法正常处理视频帧
+            //应用于输入流,为缺失或损坏的PTS(Presentation Time Stamp)生成新的时间戳，但尽量保留原始时间戳的相对关系
+            //_outputArgumentList.Add(new CustomArgument("-fflags +genpts"));
+            //应用于输出流,完全重置输出流的时间戳，使其从0开始，不考虑输入流的原始时间戳
+            _outputArgumentList.Add(new CustomArgument("-reset_timestamps 1"));
+        }
+
+        private async Task ProcessStream(Stream input, CancellationToken cancellationToken)
         {
             const int bufferSize = 16384;
             byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
@@ -333,5 +394,8 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             stream.Position = 0;
             stream.SetLength(0);
         }
+
+        #endregion
+
     }
 }

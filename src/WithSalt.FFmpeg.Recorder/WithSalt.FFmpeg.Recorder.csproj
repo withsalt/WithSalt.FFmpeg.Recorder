@@ -4,12 +4,12 @@
 		<TargetFrameworks>netstandard2.1;net8.0;net9.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<Authors>WithSalt</Authors>
-		<Description>基于FFmpeg实现的高性能视频录制框架，支持将多种输入源（本地视频、摄像头、网络流、桌面等）处理为连续的图像帧。</Description>
+		<Description>基于FFmpeg实现的高性能视频录制框架，支持从多种输入源（本地视频、摄像头、网络流、桌面等）中提取连续的图像帧。 A high-performance video recording framework based on FFmpeg, which supports extracting continuous image frames from various input sources (local videos, cameras, network streams, desktops, etc.).</Description>
 		<PackageProjectUrl>https://github.com/withsalt/WithSalt.FFmpeg.Recorder</PackageProjectUrl>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageReadmeFile>README_en.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/withsalt/WithSalt.FFmpeg.Recorder</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<Version>1.0.5</Version>
+		<Version>1.0.6</Version>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	</PropertyGroup>
@@ -19,7 +19,7 @@
 	    <Pack>True</Pack>
 	    <PackagePath>\</PackagePath>
 	  </None>
-	  <None Include="..\..\README.md">
+	  <None Include="..\..\README_en.md">
 	    <Pack>True</Pack>
 	    <PackagePath>\</PackagePath>
 	  </None>

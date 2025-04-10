@@ -1,6 +1,6 @@
 # WithSalt.FFMpeg.Recorder  
 
-A high-performance video recording framework based on FFmpeg, supporting the processing of various input sources (local videos, cameras, network streams, desktop, etc.) into continuous image frames. 
+A high-performance video recording framework based on FFmpeg, which supports extracting continuous image frames from various input sources (local videos, cameras, network streams, desktops, etc.).
 
 ## Core Features  
 
@@ -89,15 +89,12 @@ To use other input sources, simply call the corresponding API, such as `WithCame
 
 ### **Complete Demo**  
 Below is a complete demo for screen recording:  
-```csharp
+```
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using FFMpegCore;
-using FlashCap;
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder;
-using WithSalt.FFmpeg.Recorder.Interface;
 using WithSalt.FFmpeg.Recorder.Models;
 
 namespace ConsoleAppDemo
@@ -112,7 +109,7 @@ namespace ConsoleAppDemo
             }
             Directory.CreateDirectory("output");
 
-            // Use the default FFmpeg loader
+            //使用默认的ffmpeg加载器
             FFmpegHelper.SetDefaultFFmpegLoador();
 
             Channel<(long frameIndex, SKBitmap data)> frameChannel = Channel.CreateBounded<(long frameIndex, SKBitmap data)>(
@@ -121,15 +118,25 @@ namespace ConsoleAppDemo
                     FullMode = BoundedChannelFullMode.Wait
                 });
 
-            // Start writing task
+            //计算FPS
+            int uiFrameCount = 0;
+            Stopwatch lastUiFpsUpdate = Stopwatch.StartNew();
+            Stopwatch totalUiFpsUpdate = Stopwatch.StartNew();
+            int currentUiFps = 0;
+            long totalUiFps = 0;
+
+            // 启动写入任务
             var cts = new CancellationTokenSource();
             var writeTask = Task.Run(async () =>
             {
+                totalUiFpsUpdate.Restart();
+
                 while (!cts.IsCancellationRequested && await frameChannel.Reader.WaitToReadAsync(cts.Token))
                 {
                     SKBitmap? latestBitmap = null;
                     long frameIndex = 0;
 
+                    // 取出所有可用帧，只保留最后一帧
                     while (frameChannel.Reader.TryRead(out (long frameIndex, SKBitmap bitmap) data))
                     {
                         latestBitmap?.Dispose();
@@ -141,6 +148,22 @@ namespace ConsoleAppDemo
                     {
                         if (latestBitmap != null)
                         {
+                            // 更新FPS计数器
+                            uiFrameCount++;
+                            if (lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
+                            {
+                                currentUiFps = uiFrameCount;
+                                totalUiFps += uiFrameCount;
+                                uiFrameCount = 0;
+                                lastUiFpsUpdate.Restart();
+
+                                TimeSpan totalElapsed = totalUiFpsUpdate.Elapsed;
+                                int avgFps = (int)(totalUiFps / Math.Max(1, totalElapsed.TotalSeconds));
+
+                                Console.Write($"\r{(int)totalElapsed.TotalHours:00}:{totalElapsed.Minutes:00}:{totalElapsed.Seconds:00} | Current FPS: {currentUiFps} | AVG FPS: {avgFps}   ");
+                            }
+
+                            //Console.WriteLine("收到图片帧");
                             SaveBitmapAsImage(latestBitmap, $"output/{frameIndex}.jpg", SKEncodedImageFormat.Jpeg, 100);
                         }
                     }
@@ -152,9 +175,10 @@ namespace ConsoleAppDemo
             });
 
             await DesktopTest(frameChannel);
-
             Console.WriteLine("Done.");
         }
+
+        private static Action? _cancel = null;
 
         static async Task DesktopTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
@@ -170,13 +194,24 @@ namespace ConsoleAppDemo
                     }
                 })
                 .WithOutputQuality(OutputQuality.Medium)
-                .Build();
+                .Build()
+                .CancellableThrough(out _cancel)
+                //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
+                ;
 
-            Console.WriteLine($"FFMpeg Command:\nffmpeg {ffmpegCmd.Arguments}");
+            var cmd = ffmpegCmd.Arguments;
+            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
 
             await ffmpegCmd.ProcessAsynchronously();
         }
 
+        /// <summary>
+        /// 将 SKBitmap 保存为指定格式的图片文件
+        /// </summary>
+        /// <param name="bitmap">要保存的 SKBitmap 实例</param>
+        /// <param name="filePath">保存的文件路径</param>
+        /// <param name="imageFormat">图像格式（PNG、JPEG 等）</param>
+        /// <param name="quality">编码质量（针对有损格式，如 JPEG）</param>
         static void SaveBitmapAsImage(SKBitmap bitmap, string filePath, SKEncodedImageFormat imageFormat, int quality)
         {
             if (bitmap == null)
@@ -191,6 +226,7 @@ namespace ConsoleAppDemo
         }
     }
 }
+
 ```
 
 ## **Development Recommendations**  

@@ -15,48 +15,51 @@ namespace WithSalt.FFmpeg.Recorder
         /// <summary>
         /// 设置默认FFmpeg路径参数
         /// </summary>
-        public static void SetDefaultFFmpegLoador()
+        public static void SetDefaultFFmpegLoador(params string[] defaultSearchFolders)
+        {
+            SetDefaultFFmpegLoador(null, defaultSearchFolders);
+        }
+
+        /// <summary>
+        /// 设置默认FFmpeg路径参数
+        /// </summary>
+        public static void SetDefaultFFmpegLoador(string? temporaryFilesFolder, params string[] defaultSearchFolders)
         {
             GlobalFFOptions.Configure(options =>
             {
-                options.BinaryFolder = GetBinaryFolder();
-                options.TemporaryFilesFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tmp");
+                options.BinaryFolder = GetBinaryFolder(defaultSearchFolders);
                 options.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 options.Encoding = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? Encoding.Default : Encoding.UTF8;
 
-                if (!Directory.Exists(options.TemporaryFilesFolder))
+                if (!string.IsNullOrWhiteSpace(temporaryFilesFolder))
                 {
-                    Directory.CreateDirectory(options.TemporaryFilesFolder);
+                    if (!Directory.Exists(temporaryFilesFolder))
+                    {
+                        Directory.CreateDirectory(temporaryFilesFolder);
+                    }
+                    options.TemporaryFilesFolder = temporaryFilesFolder;
                 }
             });
         }
 
-        public static string GetBinaryFilePath()
+        public static string GetBinaryFolder(string[] defaultSearchFolders)
         {
-            string binName;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                binName = "ffmpeg.exe";
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                binName = "ffmpeg";
-            else
-                throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
-            string binaryFolder = !string.IsNullOrWhiteSpace(GlobalFFOptions.Current.BinaryFolder)
-                ? GlobalFFOptions.Current.BinaryFolder
-                : GetBinaryFolder();
-            string path = Path.Combine(binaryFolder, binName);
-            if (!File.Exists(path))
+            var defaultFolders = _defaultSeachFolders.ToHashSet();
+            if (defaultSearchFolders?.Any() == true)
             {
-                throw new FileNotFoundException("FFmpeg not found, please download or install ffmpeg at first.", path);
+                foreach (var item in defaultSearchFolders)
+                {
+                    if (!string.IsNullOrWhiteSpace(item))
+                    {
+                        defaultFolders.Add(item);
+                    }
+                }
             }
-            return path;
-        }
 
-        public static string GetBinaryFolder()
-        {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 //从提供的默认路径开始搜索
-                foreach (var defaultFolder in _defaultSeachFolders)
+                foreach (var defaultFolder in defaultFolders)
                 {
                     string path = Path.Combine(defaultFolder, "ffmpeg.exe");
                     if (File.Exists(path))
@@ -81,12 +84,12 @@ namespace WithSalt.FFmpeg.Recorder
                         }
                     }
                 }
-                throw new FileNotFoundException($"FFmpeg not found, please download ffmpeg to the path {string.Join(" or ", _defaultSeachFolders)}.");
+                throw new FileNotFoundException($"FFmpeg not found, please download ffmpeg to the path {string.Join(" or ", defaultFolders)}.");
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 //从提供的默认路径开始搜索
-                foreach (var defaultFolder in _defaultSeachFolders)
+                foreach (var defaultFolder in defaultFolders)
                 {
                     string path = Path.Combine(defaultFolder, "ffmpeg");
                     if (File.Exists(path))

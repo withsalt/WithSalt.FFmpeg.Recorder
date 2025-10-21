@@ -9,8 +9,8 @@
 
 	<ItemGroup>
 		<PackageReference Include="FlashCap" Version="1.11.0" />
-		<PackageReference Include="SkiaSharp" Version="2.88.9" />
-		<PackageReference Include="OnceMi.SkiaSharp.NativeAssets.Linux.LoongArch64" Version="2.88.9" />
+		<PackageReference Include="SkiaSharp" Version="3.119.0" />
+		<PackageReference Include="OnceMi.SkiaSharp.NativeAssets.Linux.LoongArch64" Version="3.119.0" />
 	</ItemGroup>
 
 	<ItemGroup>

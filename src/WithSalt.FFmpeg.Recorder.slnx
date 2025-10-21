@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Demos/">
+    <Project Path="Demos/ConsoleAppDemo/ConsoleAppDemo.csproj" />
+    <Project Path="Demos/DesktopAppDemo/DesktopAppDemo.csproj" />
+  </Folder>
+  <Project Path="WithSalt.FFmpeg.Recorder/WithSalt.FFmpeg.Recorder.csproj" />
+</Solution>

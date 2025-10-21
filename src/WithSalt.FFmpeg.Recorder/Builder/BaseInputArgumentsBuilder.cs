@@ -247,8 +247,10 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         private async Task ProcessStream(Stream input, CancellationToken cancellationToken)
         {
             const int bufferSize = 16384;
+            // 限制最大JPEG大小
+            const int maxJpegSize = 32 * 1024 * 1024; 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-            MemoryStream jpegStream = new MemoryStream();
+            MemoryStream jpegStream = new MemoryStream(81920);
             bool capturing = false;
             int lastByte = -1;
             long frameIndex = 0;
@@ -256,17 +258,17 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             try
             {
                 int bytesRead;
-                while (!cancellationToken.IsCancellationRequested && (bytesRead = await input.ReadAsync(buffer, 0, bufferSize, cancellationToken)) > 0)
+                while (!cancellationToken.IsCancellationRequested && (bytesRead = await input.ReadAsync(buffer.AsMemory(0, bufferSize), cancellationToken)) > 0)
                 {
                     int startPos = -1;
                     for (int i = 0; i < bytesRead; i++)
                     {
                         byte currentByte = buffer[i];
-
+  
                         // 检测 JPEG start marker (FFD8)
-                        if (!capturing && lastByte == 0xFF && currentByte == 0xD8)
+                        if (lastByte == 0xFF && currentByte == 0xD8)
                         {
-                            if (jpegStream.Length != 0)
+                            if (capturing || jpegStream.Length != 0)
                             {
                                 jpegStream.Position = 0;
                                 jpegStream.SetLength(0);
@@ -279,7 +281,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                         {
                             if (startPos == -1) startPos = 0;
                             int lengthToWrite = i - startPos + 1;
-                            await jpegStream.WriteAsync(buffer, startPos, lengthToWrite, cancellationToken);
+                            await jpegStream.WriteAsync(buffer.AsMemory(startPos, lengthToWrite), cancellationToken);
 
                             capturing = false;
 
@@ -289,13 +291,23 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                         }
 
                         lastByte = currentByte;
+
+                        // 防止内存溢出
+                        if (capturing && jpegStream.Length > maxJpegSize)
+                        {
+                            capturing = false;
+                            jpegStream.SetLength(0);
+                            jpegStream.Position = 0;
+                            break;
+                        }
                     }
 
                     if (capturing)
                     {
-                        if (startPos == -1) startPos = 0;
+                        if (startPos == -1) 
+                            startPos = 0;
                         int lengthToWrite = bytesRead - startPos;
-                        await jpegStream.WriteAsync(buffer, startPos, lengthToWrite, cancellationToken);
+                        await jpegStream.WriteAsync(buffer.AsMemory(startPos, lengthToWrite), cancellationToken);
 
                         startPos = -1;
                     }
@@ -309,10 +321,6 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             }
             catch (OperationCanceledException)
             {
-            }
-            catch
-            {
-                throw;
             }
             finally
             {

@@ -21,6 +21,7 @@ namespace ConsoleAppDemo
 
             //在LoongArch64架构上面，需要加载SkiaSharp的本地库（其他架构不用）
             LoongArch64RuntimeNativeLoader.Load();
+
             //使用默认的ffmpeg加载器
             FFmpegHelper.SetDefaultFFmpegLoador();
 

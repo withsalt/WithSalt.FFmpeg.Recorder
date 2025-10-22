@@ -42,7 +42,7 @@ namespace WithSalt.FFmpeg.Recorder
             });
         }
 
-        public static string GetBinaryFolder(string[] defaultSearchFolders)
+        private static string GetBinaryFolder(string[] defaultSearchFolders)
         {
             var defaultFolders = _defaultSeachFolders.ToHashSet();
             if (defaultSearchFolders?.Any() == true)

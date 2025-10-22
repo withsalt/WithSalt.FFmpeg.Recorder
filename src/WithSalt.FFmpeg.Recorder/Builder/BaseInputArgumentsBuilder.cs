@@ -27,7 +27,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         private Action<long, SKBitmap>? _imageProcessHandle;
         private Dictionary<string, bool> _requiredParameterCalls = new Dictionary<string, bool>();
 
-        private OutputQuality OutputQuality = OutputQuality.Medium;
+        protected OutputQuality _outputQuality = OutputQuality.Medium;
 
         public BaseInputArgumentsBuilder()
         {
@@ -58,15 +58,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                     //处理视频filter参数
                     foreach (var item in _filterArgumentList)
                     {
-                        if ((this.OutputQuality == OutputQuality.High) && item.Text.Trim(' ', '\r', '\n').StartsWith("-filter_complex"))
-                        {
-                            string text = item.Text.Replace("yuv420p", "yuv444p");
-                            options.WithArgument(new CustomArgument(text));
-                        }
-                        else
-                        {
-                            options.WithArgument(item);
-                        }
+                        options.WithArgument(item);
                     }
                     foreach (var item in _outputArgumentList)
                     {
@@ -85,8 +77,8 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         {
             try
             {
-                this.OutputQuality = quality;
-                switch (this.OutputQuality)
+                this._outputQuality = quality;
+                switch (this._outputQuality)
                 {
                     default:
                     case OutputQuality.High:
@@ -248,7 +240,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
         {
             const int bufferSize = 16384;
             // 限制最大JPEG大小
-            const int maxJpegSize = 32 * 1024 * 1024; 
+            const int maxJpegSize = 32 * 1024 * 1024;
             byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
             MemoryStream jpegStream = new MemoryStream(81920);
             bool capturing = false;
@@ -264,7 +256,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                     for (int i = 0; i < bytesRead; i++)
                     {
                         byte currentByte = buffer[i];
-  
+
                         // 检测 JPEG start marker (FFD8)
                         if (lastByte == 0xFF && currentByte == 0xD8)
                         {
@@ -304,7 +296,7 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
                     if (capturing)
                     {
-                        if (startPos == -1) 
+                        if (startPos == -1)
                             startPos = 0;
                         int lengthToWrite = bytesRead - startPos;
                         await jpegStream.WriteAsync(buffer.AsMemory(startPos, lengthToWrite), cancellationToken);

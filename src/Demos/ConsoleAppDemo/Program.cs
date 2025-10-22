@@ -91,9 +91,9 @@ namespace ConsoleAppDemo
                 }
             });
 
-            //await FilesTest(frameChannel);
+            await FilesTest(frameChannel);
             //await CameraTest(frameChannel);
-            await DesktopTest(frameChannel);
+            //await DesktopTest(frameChannel);
             //await RtspTest(frameChannel);
             //await RtmpTest(frameChannel);
             //await HttpTest(frameChannel, "http://192.168.188.22:5000/pe01.mkv");
@@ -119,7 +119,7 @@ namespace ConsoleAppDemo
                     }
                 })
                 .WithOutputSize(1920, 1080)
-                .WithOutputQuality(OutputQuality.Medium)
+                .WithOutputQuality(OutputQuality.High)
                 .Build()
                 .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))

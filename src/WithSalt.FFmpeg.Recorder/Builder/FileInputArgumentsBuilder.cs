@@ -86,12 +86,13 @@ namespace WithSalt.FFmpeg.Recorder.Builder
 
         private IArgument CreateFilterComplexArgument(List<string> inputFiles, int width, int height)
         {
-            var filterParts = new List<string>();
+            List<string> filterParts = new List<string>();
+            string format = this._outputQuality == Models.OutputQuality.High ? "yuv444p" : "yuv420p";
 
             // 为每个输入生成缩放和格式化参数
             for (int i = 0; i < inputFiles.Count; i++)
             {
-                filterParts.Add($"[{i}:v]format=yuv420p,scale={width}:{height},setsar=1[v{i}]");
+                filterParts.Add($"[{i}:v]format={format},scale={width}:{height},setsar=1[v{i}]");
             }
 
             // 生成concat拼接部分

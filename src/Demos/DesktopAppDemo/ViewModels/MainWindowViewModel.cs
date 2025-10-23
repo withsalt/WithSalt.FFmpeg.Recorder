@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -54,12 +55,12 @@ namespace DesktopAppDemo.ViewModels
 
         #region Binding
 
-        public SKBitmap? _image = null;
+        private Bitmap? _imageSource = null;
 
-        public SKBitmap? Image
+        public Bitmap? ImageSource
         {
-            get => _image;
-            set => this.SetProperty(ref _image, value);
+            get => _imageSource;
+            set => this.SetProperty(ref _imageSource, value);
         }
 
         public ObservableCollection<InputTypeItem> InputTypeList { get; } = new ObservableCollection<InputTypeItem>()
@@ -344,10 +345,10 @@ namespace DesktopAppDemo.ViewModels
             this.BtnBackgroundColor = Brushes.GreenYellow;
             this.IsRunning = false;
 
-            if (Image != null)
+            if (ImageSource != null)
             {
-                Image.Dispose();
-                Image = null;
+                ImageSource.Dispose();
+                ImageSource = null;
             }
         }
 
@@ -460,8 +461,8 @@ namespace DesktopAppDemo.ViewModels
                 // 显示加载画面
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    this.Image?.Dispose();
-                    this.Image = loadingBitmap;
+                    this.ImageSource?.Dispose();
+                    this.ImageSource = ConvertSKBitmapToBitmap(loadingBitmap);
                 });
 
                 // 启动任务
@@ -664,7 +665,10 @@ namespace DesktopAppDemo.ViewModels
 
                     bitmap.CopyTo(_uiBitmap[_currentUiBtimapIndex]);
                     DrawFps(_uiBitmap[_currentUiBtimapIndex], _currentUiFps);
-                    Image = _uiBitmap[_currentUiBtimapIndex];
+                    
+                    // 转换SKBitmap为Avalonia Bitmap
+                    ImageSource = ConvertSKBitmapToBitmap(_uiBitmap[_currentUiBtimapIndex]);
+                    
                     _currentUiBtimapIndex = _currentUiBtimapIndex == 0 ? 1 : 0;
 
                     // 更新FPS计数器
@@ -677,6 +681,36 @@ namespace DesktopAppDemo.ViewModels
                     }
                 }
             }, DispatcherPriority.Render);
+        }
+
+
+        /// <summary>
+        /// 将SKBitmap转换为Avalonia Bitmap
+        /// </summary>
+        private Bitmap? ConvertSKBitmapToBitmap(SKBitmap? skBitmap)
+        {
+            if (skBitmap == null)
+                return null;
+
+            try
+            {
+                // 创建内存流
+                using var stream = new MemoryStream();
+
+                // 将SKBitmap编码为PNG格式
+                using var image = SKImage.FromBitmap(skBitmap);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                data.SaveTo(stream);
+                stream.Position = 0;
+
+                // 从流创建Avalonia Bitmap
+                return new Bitmap(stream);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "转换SKBitmap到Bitmap失败");
+                return null;
+            }
         }
 
         #endregion

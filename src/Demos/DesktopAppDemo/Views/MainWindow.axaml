@@ -3,6 +3,7 @@
         xmlns:vm="using:DesktopAppDemo.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:siv="clr-namespace:SkiaImageView;assembly=SkiaImageView"
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="550"
         x:Class="DesktopAppDemo.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -65,7 +66,7 @@
 				<Panel>
 					<!-- 预览内容 -->
 					<Panel Margin="8">
-						<Image Source="{Binding ImageSource}" Stretch="Uniform"/>
+						<siv:SKImageView Source="{Binding Image}" Stretch="Uniform"/>
 					</Panel>
 					<!-- 悬浮在预览区域底部的状态栏，背景50%透明度 -->
 					<Border VerticalAlignment="Bottom"

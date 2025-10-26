@@ -549,14 +549,8 @@ namespace DesktopAppDemo.ViewModels
                 _cancel = null;
                 _currentProcessor = null;
 
-                for (int i = 0; i < _uiBitmap.Length; i++)
-                {
-                    if (_uiBitmap[i] != null)
-                    {
-                        _uiBitmap[i]?.Dispose();
-                        _uiBitmap[i] = null;
-                    }
-                }
+                this.Image?.Dispose();
+                this.Image = null;
 
                 if (!isClosing)
                 {
@@ -565,8 +559,6 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
-        private SKBitmap?[] _uiBitmap = new SKBitmap?[2];
-        private int _currentUiBtimapIndex = 0;
         private Stopwatch _imageUpdateSt = Stopwatch.StartNew();
         private long _lastImageUpdate = 0;
         private readonly object _imageSync = new();
@@ -579,23 +571,16 @@ namespace DesktopAppDemo.ViewModels
                 {
                     SKBitmap? latestBitmap = null;
 
-                    try
-                    {
-                        // 取出所有可用帧，只保留最后一帧
-                        while (_frameChannel.Reader.TryRead(out SKBitmap? bitmap))
-                        {
-                            latestBitmap?.Dispose();
-                            latestBitmap = bitmap;
-                        }
-
-                        if (latestBitmap != null)
-                        {
-                            await UpdateUIAsync(latestBitmap).ConfigureAwait(false);
-                        }
-                    }
-                    finally
+                    // 取出所有可用帧，只保留最后一帧
+                    while (_frameChannel.Reader.TryRead(out SKBitmap? bitmap))
                     {
                         latestBitmap?.Dispose();
+                        latestBitmap = bitmap;
+                    }
+
+                    if (latestBitmap != null)
+                    {
+                        await UpdateUIAsync(latestBitmap).ConfigureAwait(false);
                     }
                 }
                 _logger.LogInformation("帧处理队列已退出");
@@ -657,15 +642,9 @@ namespace DesktopAppDemo.ViewModels
             {
                 lock (_imageSync)
                 {
-                    if (_uiBitmap[_currentUiBtimapIndex] == null)
-                    {
-                        _uiBitmap[_currentUiBtimapIndex] = new SKBitmap(bitmap.Width, bitmap.Height, bitmap.ColorType, bitmap.AlphaType);
-                    }
-
-                    bitmap.CopyTo(_uiBitmap[_currentUiBtimapIndex]);
-                    DrawFps(_uiBitmap[_currentUiBtimapIndex], _currentUiFps);
-                    Image = _uiBitmap[_currentUiBtimapIndex];
-                    _currentUiBtimapIndex = _currentUiBtimapIndex == 0 ? 1 : 0;
+                    this.Image?.Dispose();
+                    DrawFps(bitmap, _currentUiFps);
+                    this.Image = bitmap;
 
                     // 更新FPS计数器
                     _uiFrameCount++;

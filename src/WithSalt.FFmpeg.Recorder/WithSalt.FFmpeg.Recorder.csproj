@@ -9,25 +9,25 @@
 		<PackageReadmeFile>README_en.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/withsalt/WithSalt.FFmpeg.Recorder</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<Version>1.0.6</Version>
+		<Version>1.0.7</Version>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <None Include="..\..\LICENSE">
-	    <Pack>True</Pack>
-	    <PackagePath>\</PackagePath>
-	  </None>
-	  <None Include="..\..\README_en.md">
-	    <Pack>True</Pack>
-	    <PackagePath>\</PackagePath>
-	  </None>
+		<None Include="..\..\LICENSE">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+		<None Include="..\..\README_en.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FFMpegCore" Version="5.2.0" />
-		<PackageReference Include="SkiaSharp" Version="[2.88.6,]" />
-		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="[2.88.6,]" />
+		<PackageReference Include="FFMpegCore" Version="[5.2.0,]" />
+		<PackageReference Include="SkiaSharp" Version="[3.119.0,]" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="[3.119.0,]" />
 	</ItemGroup>
 </Project>

@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:DesktopAppDemo.ViewModels"
-        xmlns:uc="using:DesktopAppDemo.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="550"
@@ -66,7 +65,7 @@
 				<Panel>
 					<!-- 预览内容 -->
 					<Panel Margin="8">
-						<uc:SKImageViewer Source="{Binding Image}"/>
+						<Image Source="{Binding Image}" Stretch="Uniform"/>
 					</Panel>
 					<!-- 悬浮在预览区域底部的状态栏，背景50%透明度 -->
 					<Border VerticalAlignment="Bottom"

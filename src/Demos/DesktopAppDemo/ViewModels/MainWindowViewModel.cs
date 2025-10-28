@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -27,6 +28,48 @@ using WithSalt.FFmpeg.Recorder.Models;
 
 namespace DesktopAppDemo.ViewModels
 {
+    sealed class BitmapSwitcher : IDisposable
+    {
+        private readonly WriteableBitmap?[] _tempImage = new WriteableBitmap?[2];
+        private int _currentImageIndex = 0;
+        private readonly object _sync = new();
+
+        public WriteableBitmap? CurrentBitmap
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    _currentImageIndex = _currentImageIndex == 1 ? 0 : 1;
+                    return _tempImage[_currentImageIndex];
+                }
+            }
+            set
+            {
+                lock (_sync)
+                {
+                    _tempImage[_currentImageIndex] = value;
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_sync)
+            {
+                for (int i = 0; i < _tempImage.Length; i++)
+                {
+                    if (_tempImage[i] != null)
+                    {
+                        _tempImage[i]?.Dispose();
+                        _tempImage[i] = null;
+                    }
+                }
+                _currentImageIndex = 0;
+            }
+        }
+    }
+
     internal partial class MainWindowViewModel : ViewModelBase
     {
         private readonly ILogger<MainWindowViewModel> _logger;
@@ -36,6 +79,7 @@ namespace DesktopAppDemo.ViewModels
         private CancellationTokenSource? _cts;
         private Task? _mainTask;
         private Task? _frameConsumerTask;
+        private BitmapSwitcher _bitmapSwitcher = new BitmapSwitcher();
 
         //Frame Task
         private int _uiFrameCount = 0;
@@ -54,9 +98,10 @@ namespace DesktopAppDemo.ViewModels
 
         #region Binding
 
-        public SKBitmap? _image = null;
+        private WriteableBitmap? _image = null;
 
-        public SKBitmap? Image
+
+        public WriteableBitmap? Image
         {
             get => _image;
             set => this.SetProperty(ref _image, value);
@@ -82,7 +127,7 @@ namespace DesktopAppDemo.ViewModels
             OutputQuality.Low,
         };
 
-        private string? _selectOutputResolution = "1280x720";
+        private string? _selectOutputResolution = "1920x1080";
 
         public string? SelectOutputResolution
         {
@@ -456,13 +501,19 @@ namespace DesktopAppDemo.ViewModels
 
                 string initMsg = Thread.CurrentThread.CurrentCulture.Name == "zh-CN" ? "初始化...请稍后..." : "Loading...Please waitting ...";
                 (int width, int height) = ParseResolution();
-                using SKBitmap loadingBitmap = CreateLoadingImage(width, height, initMsg, this.SKTypeface);
-                // 显示加载画面
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                using (SKBitmap loadingBitmap = CreateLoadingImage(width, height, initMsg, this.SKTypeface))
                 {
-                    this.Image?.Dispose();
-                    this.Image = loadingBitmap;
-                });
+                    // 显示加载画面
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (this.Image != null)
+                        {
+                            this.Image.Dispose();
+                            this.Image = null;
+                        }
+                        DrawSKBitmapToImage(loadingBitmap);
+                    });
+                }
 
                 // 启动任务
                 _frameConsumerTask = ConsumeFramesAsync(_cts.Token);
@@ -542,6 +593,7 @@ namespace DesktopAppDemo.ViewModels
                 }
                 _frameConsumerTask?.Dispose();
                 _cts?.Dispose();
+                _bitmapSwitcher.Dispose();
 
                 _mainTask = null;
                 _frameConsumerTask = null;
@@ -549,13 +601,8 @@ namespace DesktopAppDemo.ViewModels
                 _cancel = null;
                 _currentProcessor = null;
 
-                this.Image?.Dispose();
-                this.Image = null;
 
-                if (!isClosing)
-                {
-                    await ResetUIStateAsync();
-                }
+                await ResetUIStateAsync();
             }
         }
 
@@ -570,17 +617,23 @@ namespace DesktopAppDemo.ViewModels
                 while (!token.IsCancellationRequested && await _frameChannel.Reader.WaitToReadAsync(token))
                 {
                     SKBitmap? latestBitmap = null;
+                    try
+                    {
+                        // 取出所有可用帧，只保留最后一帧
+                        while (_frameChannel.Reader.TryRead(out SKBitmap? bitmap))
+                        {
+                            latestBitmap?.Dispose();
+                            latestBitmap = bitmap;
+                        }
 
-                    // 取出所有可用帧，只保留最后一帧
-                    while (_frameChannel.Reader.TryRead(out SKBitmap? bitmap))
+                        if (latestBitmap != null)
+                        {
+                            await UpdateUIAsync(latestBitmap).ConfigureAwait(false);
+                        }
+                    }
+                    finally
                     {
                         latestBitmap?.Dispose();
-                        latestBitmap = bitmap;
-                    }
-
-                    if (latestBitmap != null)
-                    {
-                        await UpdateUIAsync(latestBitmap).ConfigureAwait(false);
                     }
                 }
                 _logger.LogInformation("帧处理队列已退出");
@@ -637,14 +690,14 @@ namespace DesktopAppDemo.ViewModels
                 return;
             // 更新图像和计时器
             _lastImageUpdate = _imageUpdateSt.ElapsedMilliseconds;
+            // 绘制FPS
+            DrawFps(bitmap, _currentUiFps);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 lock (_imageSync)
                 {
-                    this.Image?.Dispose();
-                    DrawFps(bitmap, _currentUiFps);
-                    this.Image = bitmap;
+                    DrawSKBitmapToImage(bitmap);
 
                     // 更新FPS计数器
                     _uiFrameCount++;
@@ -656,6 +709,44 @@ namespace DesktopAppDemo.ViewModels
                     }
                 }
             }, DispatcherPriority.Render);
+        }
+
+        private void DrawSKBitmapToImage(SKBitmap skBitmap)
+        {
+            if (skBitmap == null || skBitmap.Width == 0 || skBitmap.Height == 0)
+                return;
+
+            try
+            {
+                var tempImage = _bitmapSwitcher.CurrentBitmap;
+                var info = new SKImageInfo(skBitmap.Width, skBitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                if (tempImage == null || tempImage.PixelSize.Width != info.Width || tempImage.PixelSize.Height != info.Height)
+                {
+                    tempImage?.Dispose();
+                    tempImage = new WriteableBitmap(new PixelSize(info.Width, info.Height), new Vector(96.0, 96.0), PixelFormat.Bgra8888, AlphaFormat.Premul);
+                }
+
+                using (var lockedBitmap = tempImage.Lock())
+                {
+                    using (var surface = SKSurface.Create(info, lockedBitmap.Address, lockedBitmap.RowBytes))
+                    {
+                        if (surface != null)
+                        {
+                            surface.Canvas.Clear();
+                            surface.Canvas.DrawBitmap(skBitmap, 0, 0);
+                            surface.Canvas.Flush();
+                        }
+                    }
+                }
+
+                _bitmapSwitcher.CurrentBitmap = tempImage;
+                this._image = tempImage;
+                OnPropertyChanged(nameof(Image));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"WriteSKBitmapToBitmap error: {ex.Message}");
+            }
         }
 
         #endregion
@@ -955,7 +1046,8 @@ namespace DesktopAppDemo.ViewModels
             this.CharacteristicsList.Clear();
             this.Characteristics = null;
 
-            var canListDevice = devices.EnumerateDescriptors().Where(d => d.Characteristics.Length >= 1);
+            var canListDevice = devices.EnumerateDescriptors()
+                .Where(d => d.Characteristics.Length >= 1 && !d.Name.Equals("Default", StringComparison.Ordinal));
             if (canListDevice?.Any() != true)
             {
                 return;
@@ -1005,16 +1097,24 @@ namespace DesktopAppDemo.ViewModels
             if (!string.IsNullOrWhiteSpace(selectedCharacteristicsIdentity) &&
                 this.CharacteristicsList?.Any(s => s?.ToString() == selectedCharacteristicsIdentity) == true)
             {
-                this.Characteristics =
-                    this.CharacteristicsList?.FirstOrDefault(s => s?.ToString() == selectedCharacteristicsIdentity);
+                this.Characteristics = this.CharacteristicsList?.FirstOrDefault(s => s?.ToString() == selectedCharacteristicsIdentity);
             }
             else
             {
                 var targetCharacteristics = CharacteristicsList?.FirstOrDefault(p =>
-                    p.Width == 1280 && p.Height == 720 && p.PixelFormat != FlashCap.PixelFormats.Unknown);
+                    p.Width == 1920 && p.Height == 1080 && p.PixelFormat != FlashCap.PixelFormats.Unknown);
                 if (targetCharacteristics != null)
                 {
                     this.Characteristics = targetCharacteristics;
+                }
+                else
+                {
+                    targetCharacteristics = CharacteristicsList?.FirstOrDefault(p =>
+                        p.Width == 1280 && p.Height == 720 && p.PixelFormat != FlashCap.PixelFormats.Unknown);
+                    if (targetCharacteristics != null)
+                    {
+                        this.Characteristics = targetCharacteristics;
+                    }
                 }
             }
         }

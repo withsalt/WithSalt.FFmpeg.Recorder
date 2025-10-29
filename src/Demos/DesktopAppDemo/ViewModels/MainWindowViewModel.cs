@@ -323,8 +323,7 @@ namespace DesktopAppDemo.ViewModels
         {
             try
             {
-                StopRecord(true)
-                    .ConfigureAwait(false)
+                StopRecord(true).ConfigureAwait(false)
                     .GetAwaiter().GetResult();
             }
             catch { }
@@ -379,7 +378,7 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
-        private bool _isProcessing = false;
+        private volatile bool _isProcessing = false;
 
         public async Task Start()
         {
@@ -501,7 +500,7 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
-        private async Task StopRecord(bool isClosing = false, bool isMainTaskEnd = false)
+        private async Task StopRecord(bool isClosing = false)
         {
             try
             {
@@ -512,29 +511,30 @@ namespace DesktopAppDemo.ViewModels
                 _cancel?.Invoke();
                 _cts.Cancel();
 
-                // 等待任务完成（最多5秒）
+                // 等待任务完成
                 var tasks = new List<Task>();
-                if (!isMainTaskEnd && _mainTask != null && !_mainTask.IsCompleted && !_mainTask.IsFaulted)
+                if (_mainTask != null && !_mainTask.IsCompleted && !_mainTask.IsFaulted)
                     tasks.Add(_mainTask);
                 if (_frameConsumerTask != null && !_frameConsumerTask.IsCompleted && !_frameConsumerTask.IsFaulted)
                     tasks.Add(_frameConsumerTask);
 
+                var allTasks = Task.WhenAll(tasks);
                 if (isClosing)
                 {
-                    _ = Task.WhenAll(tasks);
+                    await allTasks.ConfigureAwait(false);
                 }
                 else
                 {
                     var timeoutTask = Task.Delay(3000);
-                    var completedTask = await Task.WhenAny(Task.WhenAll(tasks), timeoutTask).ConfigureAwait(false);
+                    var completedTask = await Task.WhenAny(allTasks, timeoutTask).ConfigureAwait(false);
                     if (completedTask == timeoutTask)
                         _logger.LogWarning("停止录制超时");
+                }
 
-                    // 清空帧队列并释放资源
-                    while (_frameChannel.Reader.TryRead(out var bitmap))
-                    {
-                        bitmap?.Dispose();
-                    }
+                // 清空帧队列并释放资源
+                while (_frameChannel.Reader.TryRead(out var bitmap))
+                {
+                    bitmap?.Dispose();
                 }
             }
             catch (Exception ex)
@@ -545,10 +545,7 @@ namespace DesktopAppDemo.ViewModels
             finally
             {
                 // 释放资源
-                if (!isMainTaskEnd)
-                {
-                    _mainTask?.Dispose();
-                }
+                _mainTask?.Dispose();
                 _frameConsumerTask?.Dispose();
                 _cts?.Dispose();
                 _bitmapSwitcher.Dispose();
@@ -558,7 +555,6 @@ namespace DesktopAppDemo.ViewModels
                 _cts = null;
                 _cancel = null;
                 _currentProcessor = null;
-
 
                 await ResetUIStateAsync();
             }

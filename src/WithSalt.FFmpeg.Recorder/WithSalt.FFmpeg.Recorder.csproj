@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.1;net8.0;net9.0</TargetFrameworks>
+		<TargetFrameworks>netstandard2.1;net8.0;net9.0;net10.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<Authors>WithSalt</Authors>
 		<Description>基于FFmpeg实现的高性能视频录制框架，支持从多种输入源（本地视频、摄像头、网络流、桌面等）中提取连续的图像帧。 A high-performance video recording framework based on FFmpeg, which supports extracting continuous image frames from various input sources (local videos, cameras, network streams, desktops, etc.).</Description>
@@ -9,7 +9,7 @@
 		<PackageReadmeFile>README_en.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/withsalt/WithSalt.FFmpeg.Recorder</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<Version>1.0.7</Version>
+		<Version>1.0.8</Version>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	</PropertyGroup>

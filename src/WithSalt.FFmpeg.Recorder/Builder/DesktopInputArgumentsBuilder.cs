@@ -24,8 +24,10 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                 throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
         }
 
-        public IDesktopInputArgumentsBuilder WithFramerate(uint framerate = 30)
+        public IDesktopInputArgumentsBuilder WithFramerate(double framerate = 30)
         {
+            if (framerate <= 0)
+                throw new ArgumentOutOfRangeException(nameof(framerate), "The number of frames cannot be less than 0");
             _inputArgumentList.Add(new FrameRateArgument(framerate));
             return this;
         }

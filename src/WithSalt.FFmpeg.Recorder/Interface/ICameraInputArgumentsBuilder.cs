@@ -6,6 +6,6 @@
 
         ICameraInputArgumentsBuilder WithVideoSize(uint width, uint height);
 
-        ICameraInputArgumentsBuilder WithFramerate(uint framerate = 30);
+        ICameraInputArgumentsBuilder WithFramerate(double framerate = 30);
     }
 }

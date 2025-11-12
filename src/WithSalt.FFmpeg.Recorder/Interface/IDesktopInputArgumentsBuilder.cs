@@ -9,7 +9,7 @@ namespace WithSalt.FFmpeg.Recorder.Interface
         /// </summary>
         /// <param name="framerate"></param>
         /// <returns></returns>
-        IDesktopInputArgumentsBuilder WithFramerate(uint framerate = 30);
+        IDesktopInputArgumentsBuilder WithFramerate(double framerate = 30);
 
         /// <summary>
         /// 录制区域

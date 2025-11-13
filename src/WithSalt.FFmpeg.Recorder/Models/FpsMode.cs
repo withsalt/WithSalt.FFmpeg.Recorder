@@ -20,5 +20,15 @@ namespace WithSalt.FFmpeg.Recorder.Models
         /// 恒定帧率(Constant Frame Rate)，如果输入帧率不稳定，FFmpeg 会通过丢弃或重复帧来强制输出为恒定帧率。
         /// </summary>
         CFR = 2,
+
+        /// <summary>
+        /// 自动，FFmpeg 根据输入流的特性自动选择最合适的帧率模式
+        /// </summary>
+        Auto = 3,
+
+        /// <summary>
+        /// 丢弃
+        /// </summary>
+        Drop = 4
     }
 }

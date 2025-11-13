@@ -143,6 +143,12 @@ namespace WithSalt.FFmpeg.Recorder.Builder
                         //输出帧率为恒定帧率(Constant Frame Rate),如果输入帧率不稳定，FFmpeg 会通过丢弃或重复帧来强制输出为恒定帧率。
                         _outputArgumentList.Add(FpsModeArguments.CFR);
                         break;
+                    case FpsMode.Auto:
+                        _outputArgumentList.Add(FpsModeArguments.Auto);
+                        break;
+                    case FpsMode.Drop:
+                        _outputArgumentList.Add(FpsModeArguments.Auto);
+                        break;
                 }
             }
             finally
@@ -198,29 +204,34 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             bool isCallWithOutputFramerate = _requiredParameterCalls.ContainsKey(nameof(WithOutputFramerate));
 
             //校验FpsModel
-            if (_outputArgumentList.Any(p => p == FpsModeArguments.CFR) && !isCallWithOutputFramerate)
+            if (isCallWithFpsMode)
             {
-                throw new ArgumentException("When the fps mode is set to Constant Frame Rate (CFR), it is required to call WithOutputFramerate to specify the output frame rate.");
-            }
-            if (isCallWithOutputFramerate)
-            {
-                if (_outputArgumentList.Any(p => p == FpsModeArguments.VFR))
+                if (_outputArgumentList.Any(p => p == FpsModeArguments.CFR) && !isCallWithOutputFramerate)
                 {
-                    throw new ArgumentException("When the fps mode is set to Variable Frame Rate (VFR), the output frame rate cannot be specified.");
+                    throw new ArgumentException("When the fps mode is set to Constant Frame Rate (CFR), it is required to call WithOutputFramerate to specify the output frame rate.");
                 }
-                if (_outputArgumentList.Any(p => p == FpsModeArguments.Passthrough))
+                if (isCallWithOutputFramerate)
                 {
-                    throw new ArgumentException("When the fps mode is set to Passthrough, the output frame rate cannot be specified.");
+                    if (_outputArgumentList.Any(p => p == FpsModeArguments.VFR))
+                    {
+                        throw new ArgumentException("When the fps mode is set to Variable Frame Rate (VFR), the output frame rate cannot be specified.");
+                    }
+                    if (_outputArgumentList.Any(p => p == FpsModeArguments.Passthrough))
+                    {
+                        throw new ArgumentException("When the fps mode is set to Passthrough, the output frame rate cannot be specified.");
+                    }
                 }
             }
-
-            if (!isCallWithFpsMode && isCallWithOutputFramerate)
+            else
             {
-                this.WithFpsMode(FpsMode.CFR);
-            }
-            else if (!isCallWithFpsMode && !isCallWithOutputFramerate)
-            {
-                this.WithFpsMode(FpsMode.Passthrough);
+                if (isCallWithOutputFramerate)
+                {
+                    this.WithFpsMode(FpsMode.CFR);
+                }
+                else
+                {
+                    this.WithFpsMode(FpsMode.Passthrough);
+                }
             }
         }
 

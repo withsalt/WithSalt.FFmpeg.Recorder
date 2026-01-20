@@ -253,7 +253,15 @@ namespace WithSalt.FFmpeg.Recorder.Builder
             // 限制最大JPEG大小
             const int maxJpegSize = 32 * 1024 * 1024;
             byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-            MemoryStream jpegStream = new MemoryStream(81920);
+            // High质量约2-4MB, Medium约500KB-1MB, Low约200-500KB
+            int initialCapacity = _outputQuality switch
+            {
+                OutputQuality.High => 2 * 1024 * 1024,    // 2MB
+                OutputQuality.Medium => 512 * 1024,        // 512KB
+                OutputQuality.Low => 256 * 1024,           // 256KB
+                _ => 512 * 1024
+            };
+            MemoryStream jpegStream = new MemoryStream(initialCapacity);
             bool capturing = false;
             int lastByte = -1;
             long frameIndex = 0;

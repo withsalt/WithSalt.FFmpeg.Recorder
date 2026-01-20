@@ -44,7 +44,7 @@ namespace WithSalt.FFmpeg.Recorder
 
         private static string GetBinaryFolder(string[] defaultSearchFolders)
         {
-            var defaultFolders = _defaultSeachFolders.ToHashSet();
+            var defaultFolders = new HashSet<string>(_defaultSeachFolders);
             if (defaultSearchFolders?.Any() == true)
             {
                 foreach (var item in defaultSearchFolders)
@@ -176,8 +176,8 @@ namespace WithSalt.FFmpeg.Recorder
             string processArchitecture = GetProcessArchitecturePath();
             if (!string.IsNullOrWhiteSpace(processArchitecture))
             {
-                folders.Add(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtimes", GetProcessArchitecturePath(), "bin")).TrimEnd(Path.DirectorySeparatorChar));
-                folders.Add(Path.GetFullPath(Path.Combine(".", "runtimes", GetProcessArchitecturePath(), "bin")).TrimEnd(Path.DirectorySeparatorChar));
+                folders.Add(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtimes", processArchitecture, "bin")).TrimEnd(Path.DirectorySeparatorChar));
+                folders.Add(Path.GetFullPath(Path.Combine(".", "runtimes", processArchitecture, "bin")).TrimEnd(Path.DirectorySeparatorChar));
             }
 
             folders.Add(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin")).TrimEnd(Path.DirectorySeparatorChar));

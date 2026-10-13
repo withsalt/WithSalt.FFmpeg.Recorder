@@ -1,7 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.1;net8.0;net9.0;net10.0</TargetFrameworks>
+		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<Authors>WithSalt</Authors>
 		<Description>基于FFmpeg实现的高性能视频录制框架，支持从多种输入源（本地视频、摄像头、网络流、桌面等）中提取连续的图像帧。 A high-performance video recording framework based on FFmpeg, which supports extracting continuous image frames from various input sources (local videos, cameras, network streams, desktops, etc.).</Description>
@@ -9,25 +11,22 @@
 		<PackageReadmeFile>README_en.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/withsalt/WithSalt.FFmpeg.Recorder</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<Version>1.0.8</Version>
+		<Version>3.0.0</Version>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Include="..\..\LICENSE">
-			<Pack>True</Pack>
-			<PackagePath>\</PackagePath>
-		</None>
-		<None Include="..\..\README_en.md">
-			<Pack>True</Pack>
-			<PackagePath>\</PackagePath>
-		</None>
+		<None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+		<None Include="..\..\README_en.md" Pack="true" PackagePath="\" />
+		<None Include="..\..\THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FFMpegCore" Version="[5.2.0,]" />
+		<PackageReference Include="FFmpeg.AutoGen" Version="[9.0.1,]" />
 		<PackageReference Include="SkiaSharp" Version="[3.119.0,]" />
-		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="[3.119.0,]" />
+	</ItemGroup>
+	<ItemGroup>
+		<InternalsVisibleTo Include="WithSalt.FFmpeg.Recorder.Tests" />
 	</ItemGroup>
 </Project>

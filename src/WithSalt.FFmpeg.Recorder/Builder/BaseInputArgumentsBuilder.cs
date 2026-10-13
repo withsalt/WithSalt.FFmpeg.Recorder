@@ -1,420 +1,165 @@
-﻿using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using FFMpegCore;
-using FFMpegCore.Arguments;
-using FFMpegCore.Pipes;
 using SkiaSharp;
-using WithSalt.FFmpeg.Recorder.Builder.Providers;
 using WithSalt.FFmpeg.Recorder.Interface;
 using WithSalt.FFmpeg.Recorder.Models;
+using WithSalt.FFmpeg.Recorder.Native;
 
-namespace WithSalt.FFmpeg.Recorder.Builder
+namespace WithSalt.FFmpeg.Recorder.Builder;
+
+internal abstract class BaseInputArgumentsBuilder : IFFmpegArgumentsBuilder
 {
-    internal abstract class BaseInputArgumentsBuilder : IFFmpegArgumentsBuilder
+    private readonly object _gate = new();
+    private bool _running;
+    private int? _width, _height;
+    private double? _framerate;
+    private FpsMode? _fpsMode;
+    private OutputQuality _quality = OutputQuality.Medium;
+    private LatencyOptimizationLevel _latency = LatencyOptimizationLevel.High;
+    private Action<long, SKBitmap>? _imageHandler;
+    private Action<long, SKBitmap>? _borrowedImageHandler;
+    private Func<long, bool>? _frameFilter;
+    private int? _decoderThreads;
+    private Action<FFmpegProgress>? _progressHandler;
+    private TimeSpan _progressInterval = TimeSpan.FromSeconds(1);
+
+    protected abstract InputSpec[] CreateInputs();
+    protected bool HasOutputSize => _width.HasValue;
+    protected void Change(Action change)
     {
-        protected FFMpegArguments? _arguments;
-
-        protected List<IArgument> _outputArgumentList = new List<IArgument>();
-        protected List<IArgument> _filterArgumentList = new List<IArgument>();
-        protected LatencyOptimizationContainer _latencyOptimizationContainer = new LatencyOptimizationContainer();
-
-        private Action<long, SKBitmap>? _imageProcessHandle;
-        private Dictionary<string, bool> _requiredParameterCalls = new Dictionary<string, bool>();
-
-        protected OutputQuality _outputQuality = OutputQuality.Medium;
-
-        public BaseInputArgumentsBuilder()
+        lock (_gate)
         {
-            _outputArgumentList.Add(new ForceFormatArgument("image2pipe"));
-            _outputArgumentList.Add(new VideoCodecArgument("mjpeg"));
+            if (_running) throw new InvalidOperationException("Cannot change configuration while decoding.");
+            change();
         }
+    }
 
-        public virtual FFMpegArgumentProcessor Build()
+    protected static void ValidateFramerate(double value)
+    {
+        if (!double.IsFinite(value) || value <= 0 || value > 1000)
+            throw new ArgumentOutOfRangeException(nameof(value), "Framerate must be finite and in (0, 1000].");
+    }
+
+    /// <summary>
+    /// 注册独立图像回调：位图可修改、保留或异步入队，由调用方负责释放；替换已配置的图像视图回调。
+    /// </summary>
+    /// <inheritdoc cref="IFFmpegArgumentsBuilder.WithImageHandle"/>
+    public IFFmpegArgumentsBuilder WithImageHandle(Action<long, SKBitmap> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        Change(() => { _imageHandler = action; _borrowedImageHandler = null; });
+        return this;
+    }
+
+    /// <summary>
+    /// 注册只读图像视图回调：仅在当前同步回调内有效，禁止释放、修改或保留；替换已配置的独立图像回调。
+    /// </summary>
+    /// <inheritdoc cref="IFFmpegArgumentsBuilder.WithImageViewHandle"/>
+    public IFFmpegArgumentsBuilder WithImageViewHandle(Action<long, SKBitmap> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        Change(() => { _borrowedImageHandler = action; _imageHandler = null; });
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder WithFrameFilter(Func<long, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        Change(() => _frameFilter = predicate);
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder WithDecoderThreads(int threads)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(threads);
+        Change(() => _decoderThreads = threads);
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder WithOutputSize(int width, int height)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        if ((long)width * height > int.MaxValue / 4)
+            throw new ArgumentOutOfRangeException(nameof(width), "Output bitmap is too large.");
+        Change(() => { _width = width; _height = height; });
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder WithOutputFramerate(double framerate = 30)
+    {
+        ValidateFramerate(framerate);
+        Change(() => _framerate = framerate);
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder WithFpsMode(FpsMode fpsMode = FpsMode.Passthrough)
+    {
+        if (!Enum.IsDefined(fpsMode)) throw new ArgumentOutOfRangeException(nameof(fpsMode));
+        Change(() => _fpsMode = fpsMode);
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder WithOutputQuality(OutputQuality quality = OutputQuality.Medium)
+    {
+        if (!Enum.IsDefined(quality)) throw new ArgumentOutOfRangeException(nameof(quality));
+        Change(() => _quality = quality);
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder WithLatencyOptimizationLevel(LatencyOptimizationLevel level)
+    {
+        if (!Enum.IsDefined(level)) throw new ArgumentOutOfRangeException(nameof(level));
+        Change(() => _latency = level);
+        return this;
+    }
+
+    public IFFmpegArgumentsBuilder NotifyOnProgress(Action<FFmpegProgress> action, TimeSpan? interval = null)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        var period = interval ?? TimeSpan.FromSeconds(1);
+        if (period < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
+        Change(() => { _progressHandler = action; _progressInterval = period; });
+        return this;
+    }
+
+    private RecordingOptions BeginRun(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        lock (_gate)
         {
-            if (_arguments == null)
-            {
-                throw new ArgumentNullException("FFmpegArguments", "Please set input parameters at first.");
-            }
-            if (!_requiredParameterCalls.ContainsKey(nameof(WithOutputQuality)))
-            {
-                this.WithOutputQuality(OutputQuality.Medium);
-            }
-
-            //校验帧率模式
-            FpsModeParametersVerify();
-
-            //添加时间戳参数
-            AddPTSParameters();
-
-            FFMpegArgumentProcessor processor = _arguments
-                .OutputToPipe(new StreamPipeSink(ProcessStream), options =>
-                {
-                    //处理视频filter参数
-                    foreach (var item in _filterArgumentList)
-                    {
-                        options.WithArgument(item);
-                    }
-                    foreach (var item in _outputArgumentList)
-                    {
-                        options.WithArgument(item);
-                    }
-                });
-            return processor;
+            if (_running) throw new InvalidOperationException("This input is already decoding.");
+            var mode = _fpsMode ?? (_framerate.HasValue ? FpsMode.CFR : FpsMode.Passthrough);
+            if (mode == FpsMode.CFR && !_framerate.HasValue)
+                throw new ArgumentException("CFR requires WithOutputFramerate.");
+            if (_framerate.HasValue && mode is FpsMode.VFR or FpsMode.Passthrough)
+                throw new ArgumentException("VFR and Passthrough cannot specify an output framerate.");
+            var options = new RecordingOptions(CreateInputs(), _width, _height, _framerate, mode,
+                _quality, _latency, _imageHandler, _progressHandler, _progressInterval,
+                _borrowedImageHandler, _frameFilter, _decoderThreads);
+            _running = true;
+            return options;
         }
+    }
 
-        /// <summary>
-        /// 输出质量控制，一般选择中等就行了
-        /// </summary>
-        /// <param name="quality"></param>
-        /// <returns></returns>
-        public IFFmpegArgumentsBuilder WithOutputQuality(OutputQuality quality = OutputQuality.Medium)
+    private void Run(RecordingOptions options, CancellationToken token)
+    {
+        try
         {
-            try
-            {
-                this._outputQuality = quality;
-                switch (this._outputQuality)
-                {
-                    default:
-                    case OutputQuality.High:
-                        _outputArgumentList.Add(new ForcePixelFormat("yuv444p"));
-                        _outputArgumentList.Add(new CustomArgument("-color_range pc"));
-                        _outputArgumentList.Add(new CustomArgument("-q:v 2"));
-                        break;
-                    case OutputQuality.Medium:
-                        _outputArgumentList.Add(new ForcePixelFormat("yuv420p"));
-                        _outputArgumentList.Add(new CustomArgument("-color_range pc"));
-                        _outputArgumentList.Add(new CustomArgument("-q:v 10"));
-                        break;
-                    case OutputQuality.Low:
-                        _outputArgumentList.Add(new ForcePixelFormat("yuv420p"));
-                        _outputArgumentList.Add(new CustomArgument("-color_range pc"));
-                        _outputArgumentList.Add(new CustomArgument("-q:v 25"));
-                        break;
-                }
-            }
-            finally
-            {
-                _requiredParameterCalls[nameof(WithOutputQuality)] = true;
-            }
-            return this;
+            token.ThrowIfCancellationRequested();
+            FFmpegNative.EnsureInitialized();
+            NativeRecording.Run(options, token);
         }
+        finally { lock (_gate) _running = false; }
+    }
 
-        public IFFmpegArgumentsBuilder WithOutputSize(int width, int height)
-        {
-            if (width <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(width), "Invalid width.");
-            }
-            if (height <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(height), "Invalid height.");
-            }
-            _outputArgumentList.Add(new SizeArgument(width, height));
-            return this;
-        }
+    public void ProcessSynchronously(CancellationToken cancellationToken = default)
+        => Run(BeginRun(cancellationToken), cancellationToken);
 
-        /// <summary>
-        /// 用于控制帧率处理模式
-        /// </summary>
-        /// <param name="fpsMode"></param>
-        /// <returns></returns>
-        public IFFmpegArgumentsBuilder WithFpsMode(FpsMode fpsMode = FpsMode.Passthrough)
-        {
-            try
-            {
-                switch (fpsMode)
-                {
-                    default:
-                    case FpsMode.Passthrough:
-                        //不处理帧率，直接传递原始时间戳
-                        _outputArgumentList.Add(FpsModeArguments.Passthrough);
-                        break;
-                    case FpsMode.VFR:
-                        //根据输入帧的时间戳动态调整输出帧率 (Variable Frame Rate)
-                        _outputArgumentList.Add(FpsModeArguments.VFR);
-                        break;
-                    case FpsMode.CFR:
-                        //输出帧率为恒定帧率(Constant Frame Rate),如果输入帧率不稳定，FFmpeg 会通过丢弃或重复帧来强制输出为恒定帧率。
-                        _outputArgumentList.Add(FpsModeArguments.CFR);
-                        break;
-                    case FpsMode.Auto:
-                        _outputArgumentList.Add(FpsModeArguments.Auto);
-                        break;
-                    case FpsMode.Drop:
-                        _outputArgumentList.Add(FpsModeArguments.Auto);
-                        break;
-                }
-            }
-            finally
-            {
-                _requiredParameterCalls[nameof(WithFpsMode)] = true;
-            }
-            return this;
-        }
-
-        /// <summary>
-        /// 输出帧数控制
-        /// </summary>
-        /// <param name="framerate"></param>
-        /// <returns></returns>
-        public IFFmpegArgumentsBuilder WithOutputFramerate(double framerate = 30)
-        {
-            try
-            {
-                if (framerate <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(framerate), "Invalid framerate.");
-                }
-                _outputArgumentList.Add(new FrameRateArgument(framerate));
-            }
-            finally
-            {
-                _requiredParameterCalls[nameof(WithOutputFramerate)] = true;
-            }
-            return this;
-        }
-
-        public IFFmpegArgumentsBuilder WithImageHandle(Action<long, SKBitmap> action)
-        {
-            _imageProcessHandle = action;
-            return this;
-        }
-
-        public IFFmpegArgumentsBuilder WithLatencyOptimizationLevel(LatencyOptimizationLevel level)
-        {
-            if (!Enum.IsDefined(typeof(LatencyOptimizationLevel), (int)level))
-            {
-                level = LatencyOptimizationLevel.None;
-            }
-            this._latencyOptimizationContainer.SetLevel(level);
-            return this;
-        }
-
-        #region Private
-
-        private void FpsModeParametersVerify()
-        {
-            bool isCallWithFpsMode = _requiredParameterCalls.ContainsKey(nameof(WithFpsMode));
-            bool isCallWithOutputFramerate = _requiredParameterCalls.ContainsKey(nameof(WithOutputFramerate));
-
-            //校验FpsModel
-            if (isCallWithFpsMode)
-            {
-                if (_outputArgumentList.Any(p => p == FpsModeArguments.CFR) && !isCallWithOutputFramerate)
-                {
-                    throw new ArgumentException("When the fps mode is set to Constant Frame Rate (CFR), it is required to call WithOutputFramerate to specify the output frame rate.");
-                }
-                if (isCallWithOutputFramerate)
-                {
-                    if (_outputArgumentList.Any(p => p == FpsModeArguments.VFR))
-                    {
-                        throw new ArgumentException("When the fps mode is set to Variable Frame Rate (VFR), the output frame rate cannot be specified.");
-                    }
-                    if (_outputArgumentList.Any(p => p == FpsModeArguments.Passthrough))
-                    {
-                        throw new ArgumentException("When the fps mode is set to Passthrough, the output frame rate cannot be specified.");
-                    }
-                }
-            }
-            else
-            {
-                if (isCallWithOutputFramerate)
-                {
-                    this.WithFpsMode(FpsMode.CFR);
-                }
-                else
-                {
-                    this.WithFpsMode(FpsMode.Passthrough);
-                }
-            }
-        }
-
-        private void AddPTSParameters()
-        {
-            //用于控制是否在每个数据包（packet）写入时刷新（flush）缓冲区，1=启用（默认），每个数据包都会刷新缓冲区，减少延迟。
-            _outputArgumentList.Add(new CustomArgument("-flush_packets 1"));
-
-            //以下参数用于时间戳(DTS)相关的错误，导致编码器无法正常处理视频帧
-            //应用于输入流,为缺失或损坏的PTS(Presentation Time Stamp)生成新的时间戳，但尽量保留原始时间戳的相对关系
-            //_outputArgumentList.Add(new CustomArgument("-fflags +genpts"));
-            //应用于输出流,完全重置输出流的时间戳，使其从0开始，不考虑输入流的原始时间戳
-            _outputArgumentList.Add(new CustomArgument("-reset_timestamps 1"));
-        }
-
-        private async Task ProcessStream(Stream input, CancellationToken cancellationToken)
-        {
-            const int bufferSize = 16384;
-            // 限制最大JPEG大小
-            const int maxJpegSize = 32 * 1024 * 1024;
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-            // High质量约2-4MB, Medium约500KB-1MB, Low约200-500KB
-            int initialCapacity = _outputQuality switch
-            {
-                OutputQuality.High => 2 * 1024 * 1024,    // 2MB
-                OutputQuality.Medium => 512 * 1024,        // 512KB
-                OutputQuality.Low => 256 * 1024,           // 256KB
-                _ => 512 * 1024
-            };
-            MemoryStream jpegStream = new MemoryStream(initialCapacity);
-            bool capturing = false;
-            int lastByte = -1;
-            long frameIndex = 0;
-
-            try
-            {
-                int bytesRead;
-                while (!cancellationToken.IsCancellationRequested && (bytesRead = await input.ReadAsync(buffer.AsMemory(0, bufferSize), cancellationToken)) > 0)
-                {
-                    int startPos = -1;
-                    for (int i = 0; i < bytesRead; i++)
-                    {
-                        byte currentByte = buffer[i];
-
-                        // 检测 JPEG start marker (FFD8)
-                        if (lastByte == 0xFF && currentByte == 0xD8)
-                        {
-                            if (capturing || jpegStream.Length != 0)
-                            {
-                                jpegStream.Position = 0;
-                                jpegStream.SetLength(0);
-                            }
-                            capturing = true;
-                            startPos = i - 1;
-                        }
-                        // 检测 JPEG end marker (FFD9)
-                        else if (capturing && lastByte == 0xFF && currentByte == 0xD9)
-                        {
-                            if (startPos == -1) startPos = 0;
-                            int lengthToWrite = i - startPos + 1;
-                            await jpegStream.WriteAsync(buffer.AsMemory(startPos, lengthToWrite), cancellationToken);
-
-                            capturing = false;
-
-                            DecodeImage(jpegStream, ++frameIndex);
-
-                            startPos = -1;
-                        }
-
-                        lastByte = currentByte;
-
-                        // 防止内存溢出
-                        if (capturing && jpegStream.Length > maxJpegSize)
-                        {
-                            capturing = false;
-                            jpegStream.SetLength(0);
-                            jpegStream.Position = 0;
-                            break;
-                        }
-                    }
-
-                    if (capturing)
-                    {
-                        if (startPos == -1)
-                            startPos = 0;
-                        int lengthToWrite = bytesRead - startPos;
-                        await jpegStream.WriteAsync(buffer.AsMemory(startPos, lengthToWrite), cancellationToken);
-
-                        startPos = -1;
-                    }
-                }
-
-                // 如果读完了流还在捕获状态，说明最后的帧不完整，可以根据需要丢弃
-                if (capturing && jpegStream.Length > 0)
-                {
-                    DropIncompleteJpegData(jpegStream);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer, true);
-                await jpegStream.DisposeAsync();
-                await input.DisposeAsync();
-            }
-        }
-
-        /// <summary>
-        /// 处理完整的 JPEG 图像
-        /// </summary>
-        /// <param name="stream"></param>
-        /// <param name="frameIndex"></param>
-        private void DecodeImage(MemoryStream stream, long frameIndex)
-        {
-            try
-            {
-                if (_imageProcessHandle == null)
-                {
-                    return;
-                }
-                try
-                {
-                    stream.Position = 0;
-                    using (var skStram = new SKManagedStream(stream, false))
-                    {
-                        SKBitmap bitmap = SKBitmap.Decode(skStram);
-                        if (bitmap == null)
-                        {
-                            Debug.WriteLine($"Decode jpeg memory stream failed.");
-                            return;
-                        }
-
-                        if (bitmap.ColorType == SKColorType.Bgra8888)
-                        {
-                            _imageProcessHandle.Invoke(frameIndex, bitmap);
-                        }
-                        else
-                        {
-                            SKBitmap? dest = bitmap.Copy(SKColorType.Bgra8888);
-                            if (dest == null)
-                            {
-                                _imageProcessHandle.Invoke(frameIndex, bitmap);
-                            }
-                            else
-                            {
-                                _imageProcessHandle.Invoke(frameIndex, dest);
-                                bitmap.Dispose();
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // 记录解码错误
-                    Debug.WriteLine($"Decode error: {ex}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error processing JPEG image: {ex.Message}");
-            }
-            finally
-            {
-                stream.Position = 0;
-                stream.SetLength(0);
-            }
-        }
-
-        /// <summary>
-        /// 处理不完整的 JPEG 数据
-        /// </summary>
-        /// <param name="stream"></param>
-        private void DropIncompleteJpegData(MemoryStream stream)
-        {
-            Debug.WriteLine($"Warning: Incomplete JPEG data found ({stream.Length} bytes)");
-
-            stream.Position = 0;
-            stream.SetLength(0);
-        }
-
-        #endregion
-
+    public async Task ProcessAsynchronously(CancellationToken cancellationToken = default)
+    {
+        var options = BeginRun(cancellationToken);
+        // Always run the finally, including cancellation between snapshot and worker start.
+        // Await inside an async method so OperationCanceledException completes the public
+        // task as Canceled. The worker must not be canceled before Run releases _running.
+        await Task.Run(() => Run(options, cancellationToken)).ConfigureAwait(false);
     }
 }

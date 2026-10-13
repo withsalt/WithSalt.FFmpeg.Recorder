@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace WithSalt.FFmpeg.Recorder.Interface.StreamInputs
 {
@@ -21,7 +21,7 @@ namespace WithSalt.FFmpeg.Recorder.Interface.StreamInputs
         /// <param name="probeSize"></param>
         /// <returns></returns>
         /// <remarks>
-        /// 默认参数为64字节，这个值非常小，在无法正确识别流的情况下，可以适当增大这个值
+        /// 显式值覆盖低延迟预设；最小值为32字节，0表示恢复预设。无法识别流时应增大此值。
         /// </remarks>
         IRtspInputArgumentsBuilder WithProbeSize(uint probeSize);
     }

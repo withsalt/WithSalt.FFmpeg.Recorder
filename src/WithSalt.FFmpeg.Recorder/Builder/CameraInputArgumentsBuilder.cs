@@ -1,83 +1,35 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
-using FFMpegCore;
-using FFMpegCore.Arguments;
-using FFMpegCore.Enums;
 using WithSalt.FFmpeg.Recorder.Interface;
+using WithSalt.FFmpeg.Recorder.Native;
 
-namespace WithSalt.FFmpeg.Recorder.Builder
+namespace WithSalt.FFmpeg.Recorder.Builder;
+
+internal sealed class CameraInputArgumentsBuilder : BaseInputArgumentsBuilder, ICameraInputArgumentsBuilder
 {
-    internal class CameraInputArgumentsBuilder : BaseInputArgumentsBuilder, ICameraInputArgumentsBuilder
+    private string? _device;
+    private uint _width = 1280, _height = 720;
+    private double? _framerate;
+    public ICameraInputArgumentsBuilder WithDeviceName(string deviceName)
     {
-        private List<IArgument> _inputArgumentList = new List<IArgument>();
-        public CameraInputArgumentsBuilder()
-        {
-            _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                _inputArgumentList.Add(new ForceFormatArgument("dshow"));
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                _inputArgumentList.Add(new ForceFormatArgument("v4l2"));
-            else
-                throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
-        }
-
-        private string _deviceName = string.Empty;
-
-        public ICameraInputArgumentsBuilder WithDeviceName(string deviceName)
-        {
-            if (string.IsNullOrWhiteSpace(deviceName))
-            {
-                throw new ArgumentNullException(nameof(deviceName));
-            }
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                this._deviceName = $"video=\"{deviceName}\"";
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                this._deviceName = $"\"{deviceName}\"";
-            else
-                throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
-            return this;
-        }
-
-        public ICameraInputArgumentsBuilder WithVideoSize(uint width, uint height)
-        {
-            _inputArgumentList.Add(new CustomArgument($"-video_size {width}x{height}"));
-            return this;
-        }
-
-        public ICameraInputArgumentsBuilder WithFramerate(double framerate = 30)
-        {
-            if (framerate <= 0)
-                throw new ArgumentOutOfRangeException(nameof(framerate), "The number of frames cannot be less than 0");
-            _inputArgumentList.Add(new FrameRateArgument(framerate));
-            return this;
-        }
-
-        public override FFMpegArgumentProcessor Build()
-        {
-            if (string.IsNullOrWhiteSpace(this._deviceName))
-            {
-                throw new ArgumentException("Please specify the input device name.");
-            }
-            if (!_inputArgumentList.Any(s => s.Text.StartsWith("-video_size", StringComparison.OrdinalIgnoreCase)))
-            {
-                WithVideoSize(1280, 720);
-            }
-            _arguments = FFMpegArguments
-               .FromDeviceInput(this._deviceName, opt =>
-               {
-                   foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
-                   {
-                       opt.WithArgument(argument);
-                   }
-                   foreach (var argument in _inputArgumentList)
-                   {
-                       opt.WithArgument(argument);
-                   }
-               });
-            return base.Build();
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceName);
+        Change(() => _device = deviceName);
+        return this;
+    }
+    public ICameraInputArgumentsBuilder WithVideoSize(uint width, uint height)
+    {
+        if (width == 0 || height == 0 || (ulong)width * height > int.MaxValue / 4)
+            throw new ArgumentOutOfRangeException(nameof(width), "Invalid camera resolution.");
+        Change(() => { _width = width; _height = height; });
+        return this;
+    }
+    public ICameraInputArgumentsBuilder WithFramerate(double framerate = 30)
+    {
+        ValidateFramerate(framerate);
+        Change(() => _framerate = framerate);
+        return this;
+    }
+    protected override InputSpec[] CreateInputs()
+    {
+        if (_device is null) throw new ArgumentException("Specify a camera with WithDeviceName.");
+        return [DeviceInputFactory.Camera(NativePlatform.OS, _device, _width, _height, _framerate)];
     }
 }

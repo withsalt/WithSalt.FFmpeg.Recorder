@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Globalization;
 using SkiaSharp;
 
 
@@ -15,42 +15,36 @@ namespace DesktopAppDemo.Utils
                 message = "屏幕范围参数不能为空";
                 return false;
             }
-            string[] param = inputScreen.Split(',', System.StringSplitOptions.RemoveEmptyEntries);
-            if (param == null || (param.Length != 4 && param.Length != 2))
+            string[] param = inputScreen.Split(',', System.StringSplitOptions.TrimEntries);
+            if (param.Length != 4 && param.Length != 2)
             {
-                message = "Path参数不正确，示例：0,0,800,800（x, y, width, height）";
+                message = "录制范围格式不正确，请输入 x,y 或 x,y,width,height，例如：0,0 或 0,0,800,600";
                 return false;
             }
-            int x, y, width, height;
-            int[] paramVal = param.Select(p => int.TryParse(p, out int oVal) ? oVal : -1).ToArray();
-            x = paramVal[0];
-            y = paramVal[1];
-            if (paramVal.Length > 2)
+            if (!int.TryParse(param[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int x)
+                || !int.TryParse(param[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y))
             {
-                if (paramVal[2] < 0)
-                {
-                    message = "width参数不正确，width坐标不能小于0，示例：0,0,800,800（x, y, width, height）";
-                    return false;
-                }
-                width = paramVal[2];
-                if (paramVal[3] < 0)
-                {
-                    message = "height参数不正确，height坐标不能小于0，示例：0,0,800,800（x, y, width, height）";
-                    return false;
-                }
-                height = paramVal[3];
-            }
-            else
-            {
-                width = 0;
-                height = 0;
-            }
-            rectangle = SKRect.Create(new SKPoint(x, y), new SKSize(width, height));
-            if (rectangle.Value.Width < 0 || rectangle.Value.Height < 0)
-            {
-                message = "width和height参数不正确，示例：0,0,800,800（x, y, width, height）";
+                message = "录制范围的 x、y 必须为整数像素坐标";
                 return false;
             }
+            int width = 0, height = 0;
+            bool hasSize = param.Length == 4 && (param[2].Length > 0 || param[3].Length > 0);
+            if (hasSize && (!int.TryParse(param[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out width)
+                || !int.TryParse(param[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out height)
+                || width < 0 || height < 0 || (width == 0) != (height == 0)))
+            {
+                message = "width、height 必须同时为正整数，或同时留空/为 0 以自动确定录制范围";
+                return false;
+            }
+            var parsed = SKRect.Create(x, y, width, height);
+            if ((double)parsed.Left != x || (double)parsed.Top != y
+                || (double)parsed.Width != width || (double)parsed.Height != height
+                || (long)width * height > int.MaxValue / 4)
+            {
+                message = "录制范围过大，无法表示为有效的像素矩形";
+                return false;
+            }
+            rectangle = parsed;
             return true;
         }
     }

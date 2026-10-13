@@ -8,9 +8,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FlashCap" Version="1.11.0" />
-		<PackageReference Include="SkiaSharp" Version="3.119.0" />
-		<PackageReference Include="OnceMi.SkiaSharp.NativeAssets.Linux.LoongArch64" Version="3.119.0" />
+		<PackageReference Include="FFmpeg.LGPL" Version="20261013.1.0" />
+		<PackageReference Include="SkiaSharp" Version="4.153.1" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -18,9 +18,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Update="runtimes\win-x64\bin\ffmpeg.exe">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
 		<None Update="videos\*.*">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>

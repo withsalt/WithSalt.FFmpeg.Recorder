@@ -1,106 +1,34 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using FFMpegCore;
-using FFMpegCore.Arguments;
-using FFMpegCore.Enums;
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder.Interface;
+using WithSalt.FFmpeg.Recorder.Native;
 
-namespace WithSalt.FFmpeg.Recorder.Builder
+namespace WithSalt.FFmpeg.Recorder.Builder;
+
+internal sealed class DesktopInputArgumentsBuilder : BaseInputArgumentsBuilder, IDesktopInputArgumentsBuilder
 {
-    internal class DesktopInputArgumentsBuilder : BaseInputArgumentsBuilder, IDesktopInputArgumentsBuilder
+    private SKRect? _rectangle;
+    private double? _framerate;
+    public IDesktopInputArgumentsBuilder WithFramerate(double framerate = 30)
     {
-        private List<IArgument> _inputArgumentList = new List<IArgument>();
-        public DesktopInputArgumentsBuilder()
-        {
-            _inputArgumentList.Add(new DisableChannelArgument(Channel.Audio));
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                _inputArgumentList.Add(new ForceFormatArgument("gdigrab"));
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                _inputArgumentList.Add(new ForceFormatArgument("x11grab"));
-            else
-                throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
-        }
-
-        public IDesktopInputArgumentsBuilder WithFramerate(double framerate = 30)
-        {
-            if (framerate <= 0)
-                throw new ArgumentOutOfRangeException(nameof(framerate), "The number of frames cannot be less than 0");
-            _inputArgumentList.Add(new FrameRateArgument(framerate));
-            return this;
-        }
-
-        string inputPath = string.Empty;
-
-        public IDesktopInputArgumentsBuilder WithRectangle(SKRect rectangle)
-        {
-            if (rectangle.Size.Width < 0 || rectangle.Size.Height < 0)
-            {
-                throw new ArgumentException("Invalid rectangle size");
-            }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                _inputArgumentList.Add(new CustomArgument($"-offset_x {rectangle.Location.X}"));
-                _inputArgumentList.Add(new CustomArgument($"-offset_y {rectangle.Location.Y}"));
-                if (rectangle.Size.Width > 0 && rectangle.Size.Height > 0)
-                {
-                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Size.Width}x{rectangle.Size.Height}"));
-                }
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                inputPath = $":0.0+{rectangle.Location.X},{rectangle.Location.Y}";
-                if (rectangle.Size.Width > 0 && rectangle.Size.Height > 0)
-                {
-                    _inputArgumentList.Add(new CustomArgument($"-video_size {rectangle.Size.Width}x{rectangle.Size.Height}"));
-                }
-            }
-            else
-            {
-                throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
-            }
-            return this;
-        }
-
-        public override FFMpegArgumentProcessor Build()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                _arguments = FFMpegArguments.FromFileInput("desktop", false, opt =>
-                {
-                    foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
-                    {
-                        opt.WithArgument(argument);
-                    }
-                    foreach (var argument in _inputArgumentList)
-                    {
-                        opt.WithArgument(argument);
-                    }
-                });
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                string path = !string.IsNullOrWhiteSpace(inputPath) ? inputPath : ":0.0";
-                _arguments = FFMpegArguments.FromFileInput(path, false, opt =>
-                {
-                    foreach (var argument in _latencyOptimizationContainer.Container[_latencyOptimizationContainer.Level])
-                    {
-                        opt.WithArgument(argument);
-                    }
-                    foreach (var argument in _inputArgumentList)
-                    {
-                        opt.WithArgument(argument);
-                    }
-                });
-            }
-            else
-            {
-                throw new PlatformNotSupportedException($"Unsupported system type: {RuntimeInformation.OSDescription}");
-            }
-            return base.Build();
-        }
+        ValidateFramerate(framerate);
+        Change(() => _framerate = framerate);
+        return this;
     }
+    public IDesktopInputArgumentsBuilder WithRectangle(SKRect rectangle)
+    {
+        if (!float.IsFinite(rectangle.Left) || !float.IsFinite(rectangle.Top)
+            || !float.IsFinite(rectangle.Width) || !float.IsFinite(rectangle.Height)
+            || rectangle.Width < 0 || rectangle.Height < 0
+            || (rectangle.Width == 0) != (rectangle.Height == 0)
+            || rectangle.Width * (double)rectangle.Height > int.MaxValue / 4
+            || rectangle.Left < int.MinValue || rectangle.Left >= int.MaxValue
+            || rectangle.Top < int.MinValue || rectangle.Top >= int.MaxValue
+            || rectangle.Left != MathF.Truncate(rectangle.Left) || rectangle.Top != MathF.Truncate(rectangle.Top)
+            || rectangle.Width != MathF.Truncate(rectangle.Width) || rectangle.Height != MathF.Truncate(rectangle.Height))
+            throw new ArgumentException("Capture rectangle requires finite integer pixel coordinates and dimensions that are both positive or both zero for automatic sizing.", nameof(rectangle));
+        Change(() => _rectangle = rectangle);
+        return this;
+    }
+    protected override InputSpec[] CreateInputs()
+        => [DeviceInputFactory.Desktop(NativePlatform.OS, _rectangle, _framerate, Environment.GetEnvironmentVariable("DISPLAY"))];
 }

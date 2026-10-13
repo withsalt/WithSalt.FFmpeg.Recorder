@@ -4,4 +4,8 @@
     <Project Path="Demos/DesktopAppDemo/DesktopAppDemo.csproj" />
   </Folder>
   <Project Path="WithSalt.FFmpeg.Recorder/WithSalt.FFmpeg.Recorder.csproj" />
+  <Folder Name="/Tests/">
+    <Project Path="../tests/DesktopAppDemo.Tests/DesktopAppDemo.Tests.csproj" />
+    <Project Path="../tests/WithSalt.FFmpeg.Recorder.Tests/WithSalt.FFmpeg.Recorder.Tests.csproj" />
+  </Folder>
 </Solution>

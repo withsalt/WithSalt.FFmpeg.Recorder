@@ -1,10 +1,8 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Diagnostics;
 using System.Threading.Channels;
-using FFMpegCore;
-using FlashCap;
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder;
+using WithSalt.FFmpeg.Recorder.Interface;
 using WithSalt.FFmpeg.Recorder.Models;
 
 namespace ConsoleAppDemo
@@ -19,17 +17,13 @@ namespace ConsoleAppDemo
             }
             Directory.CreateDirectory("output");
 
-            //在LoongArch64架构上面，需要加载SkiaSharp的本地库（其他架构不用）
-            LoongArch64RuntimeNativeLoader.Load();
-
-            //使用默认的ffmpeg加载器
-            FFmpegHelper.SetDefaultFFmpegLoador();
-
             Channel<(long frameIndex, SKBitmap data)> frameChannel = Channel.CreateBounded<(long frameIndex, SKBitmap data)>(
-                new BoundedChannelOptions(10)
+                new BoundedChannelOptions(1)
                 {
-                    FullMode = BoundedChannelFullMode.Wait
-                });
+                    FullMode = BoundedChannelFullMode.DropOldest,
+                    SingleReader = true,
+                    SingleWriter = true
+                }, itemDropped: frame => frame.data.Dispose());
 
             //计算FPS
             int uiFrameCount = 0;
@@ -52,11 +46,6 @@ namespace ConsoleAppDemo
                     // 取出所有可用帧，只保留最后一帧
                     while (frameChannel.Reader.TryRead(out (long frameIndex, SKBitmap bitmap) data))
                     {
-                        if (frameChannel.Reader.Count > 2)
-                        {
-                            Console.WriteLine("堆积");
-                        }
-
                         latestBitmap?.Dispose();
                         latestBitmap = data.bitmap;
                         frameIndex = data.frameIndex;
@@ -104,11 +93,9 @@ namespace ConsoleAppDemo
             Console.WriteLine("Done.");
         }
 
-        private static Action? _cancel = null;
-
         static async Task FilesTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+            var ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithFileInput()
                 .WithFiles("./videos/01.mp4", "./videos/02.mp4", "./videos/04.mp4")
                 //.WithFiles("F:\\Temp\\舌尖上的中国第三季第1集.CCTV1.A.Bite.Of.China.III.Ep01.HD-1080p.X264.AAC-99Mp4.mp4")
@@ -121,23 +108,18 @@ namespace ConsoleAppDemo
                 })
                 .WithOutputSize(1920, 1080)
                 .WithOutputQuality(OutputQuality.High)
-                .Build()
-                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
 
             await ffmpegCmd.ProcessAsynchronously();
         }
 
         static async Task DesktopTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithDesktopInput()
                 .WithRectangle(SKRect.Create(new SKPoint(0, 0), new SKSize(1280, 720)))
-                .WithFramerate(60)
+                .WithFramerate(120)
                 .WithImageHandle((frameIndex, bitmap) =>
                 {
                     if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))
@@ -148,20 +130,15 @@ namespace ConsoleAppDemo
                     }
                 })
                 .WithOutputQuality(OutputQuality.Medium)
-                .Build()
-                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
 
             await ffmpegCmd.ProcessAsynchronously();
         }
 
         static async Task RtspTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithStreamInput()
                 .WithRtsp("rtsp://admin:admin123.@192.168.188.66:554/stream1")
                 //.WithUdp()
@@ -175,20 +152,15 @@ namespace ConsoleAppDemo
                 })
                 //RTSP视频流使用较低质量编码可能导致图像错误
                 .WithOutputQuality(OutputQuality.Medium)
-                .Build()
-                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
 
             await ffmpegCmd.ProcessAsynchronously();
         }
 
         static async Task HttpTest(Channel<(long frameIndex, SKBitmap data)> frameChannel, string uri)
         {
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithStreamInput()
                 .WithHttp(uri)
                 .WithTimeout(10)
@@ -202,20 +174,15 @@ namespace ConsoleAppDemo
                 })
                 //RTSP视频流使用较低质量编码可能导致图像错误
                 .WithOutputQuality(OutputQuality.Medium)
-                .Build()
-                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
 
             await ffmpegCmd.ProcessAsynchronously();
         }
 
         static async Task RtmpTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithStreamInput()
                 .WithRtmp("rtmp://192.168.188.22:1935/live/stream?user=admin&pass=oxV7PDo0CSpKMra7IXTmlx5Xo5KOeFsk")
                 .WithLiveType(RtmpLiveType.Live)
@@ -227,36 +194,28 @@ namespace ConsoleAppDemo
                     }
                 })
                 .WithOutputQuality(OutputQuality.Medium)
-                .Build()
-                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
 
             await ffmpegCmd.ProcessAsynchronously();
         }
 
         static async Task CameraTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
         {
-            List<CaptureDeviceDescriptor>? devices = new CaptureDevices()?.EnumerateDescriptors().ToList();
-            if (devices?.Any() != true)
+            IReadOnlyList<CameraDevice> devices = OperatingSystem.IsMacOS()
+                ? [new CameraDevice("default", "Default AVFoundation camera", true)]
+                : FFmpegNative.EnumerateCameraDevices();
+            if (devices.Count == 0)
             {
-                throw new Exception($"找不到视频输入设备！");
+                throw new InvalidOperationException("找不到视频输入设备！");
             }
 
-            CaptureDeviceDescriptor device = devices.First();
+            CameraDevice device = devices.FirstOrDefault(device => device.IsDefault) ?? devices[0];
+            Console.WriteLine($"Using camera: {device.Description ?? device.Name} ({device.Name})");
 
-            string? deviceName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? device!.Name : device!.Identity?.ToString();
-            if (string.IsNullOrWhiteSpace(deviceName))
-            {
-                throw new Exception("获取设备描述符失败");
-            }
-
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder ffmpegCmd = new FFmpegArgumentsBuilder()
                 .WithCameraInput()
-                .WithDeviceName(deviceName)
+                .WithDeviceName(device.Name)
                 .WithVideoSize(1280, 720)
                 .WithFramerate(30)
                 .WithImageHandle((frameIndex, bitmap) =>
@@ -267,13 +226,8 @@ namespace ConsoleAppDemo
                     }
                 })
                 .WithOutputQuality(OutputQuality.Medium)
-                .Build()
-                .CancellableThrough(out _cancel)
                 //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
                 ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
 
             await ffmpegCmd.ProcessAsynchronously();
         }

@@ -1,250 +1,190 @@
-# WithSalt.FFMpeg.Recorder  
+# WithSalt.FFmpeg.Recorder
 
-A high-performance video recording framework based on FFmpeg, which supports extracting continuous image frames from various input sources (local videos, cameras, network streams, desktops, etc.).
+Decode video through FFmpeg and output a sequence of SkiaSharp `SKBitmap` frames. Inputs include local files, sequential files, cameras, desktop capture, RTSP, HTTP/HLS and RTMP.
 
-## Core Features  
+[中文](README.md)
 
-### **Supported Input Sources**  
-- Local video files (supports multiple files)  
-- Real-time camera capture  
-- Streaming (RTSP, RTMP, HLS, etc.)
-- Desktop screen recording (Windows, Linux XOrg)  
+## Installation and setup
 
-### **Supported Platforms and Operating Systems**  
-
-| OS       | Runtime        | x86 | x64 | ARM | ARM64 | LoongArch64 |
-|----------|---------------|:---:|:---:|:---:|:----:|:-----------:|
-| Windows  | .NET Core 3.1+ |  √  |  √  |     |      |             |
-| Linux    | .NET Core 3.1+ |     |  √  |  √  |  √   |      √      |
-
-## Quick Start  
-
-### **Install NuGet Package**  
-Install `WithSalt.FFmpeg.Recorder` via NuGet Package Manager:  
-[![NuGet Version](https://img.shields.io/nuget/v/WithSalt.FFmpeg.Recorder.svg?style=flat)](https://www.nuget.org/packages/WithSalt.FFmpeg.Recorder/)  
-
-Or install via Terminal:  
-```shell
+```sh
 dotnet add package WithSalt.FFmpeg.Recorder
 ```
 
-### **Install FFmpeg**  
-For Windows systems, you can download the precompiled FFmpeg from [this repository](https://github.com/BtbN/FFmpeg-Builds/releases). Then, place `ffmpeg.exe` in the application root directory or in one of the directories that support automatic search (see the next section).  
+`WithSalt.FFmpeg.Recorder` does not include FFmpeg native libraries. The consuming project must select and install a native library package such as `FFmpeg.LGPL`, `FFmpeg.GPL` or `Sdcb.FFmpeg.runtime.windows-x64`. NuGet provides many such packages; choose one built against FFmpeg 7.x or later.
+The following example uses `FFmpeg.LGPL`:
 
-It is recommended to add a conditional compilation parameter in the project configuration to automatically copy `ffmpeg.exe` when compiling for Windows:  
-```xml
-<ItemGroup Condition="'$(OS)' == 'Windows_NT' OR '$(RuntimeIdentifier)' == 'win-x64'">
-	<None Update="runtimes\win-x64\bin\ffmpeg.exe">
-		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</None>
-</ItemGroup>
+```sh
+dotnet add package FFmpeg.LGPL
 ```
-For Linux systems (e.g., Debian, Ubuntu), install FFmpeg using the command:  
-```shell
-sudo apt install ffmpeg
-```
-You can also refer to the demo examples in the project for FFmpeg path configurations.  
 
-### **Load FFmpeg**  
-Before calling any API provided by the library, we need to specify the FFmpeg directory and perform some basic configurations:  
+On Windows, FFmpeg native libraries generally need to be installed through a package. On Linux/macOS, use your distribution's package manager or Homebrew to install shared libraries and dependencies matching the process architecture.
+For example, on Ubuntu, Debian or Deepin:
+
+```sh
+apt install ffmpeg
+
+# dotnet runtime dependencies, Libicu requires installing different versions on different system versions: libicu76 supports Debian 13x, libicu78 supports Ubuntu 26.x
+apt install ca-certificates libc6 libgcc-s1 libgssapi-krb5-2 libicu76 libssl3t64 libstdc++6 tzdata zlib1g
+```
+
+When FFmpeg libraries are present in the application directory, they are loaded from the same directory; missing libraries cause an error. You can also explicitly configure the native library path before the first execution:
+
 ```csharp
-// Use the default FFmpeg loader
-FFmpegHelper.SetDefaultFFmpegLoador();
+FFmpegNative.Configure(options =>
+{
+    options.LibraryPath = "/opt/ffmpeg/lib"; // macOS example: /opt/homebrew/opt/ffmpeg/lib
+});
 ```
-After calling `SetDefaultFFmpegLoador`, the following initialization steps will be performed:  
-1. The program will search for the FFmpeg executable in the following locations:  
-    - The runtime directory matching the current process architecture, e.g., `.\runtimes\win-x64\bin\ffmpeg.exe`  
-    - The application root directory, e.g., `<ApplicationDirectory>\ffmpeg.exe`  
-    - The `bin` directory inside the application directory, e.g., `<ApplicationDirectory>\bin\ffmpeg.exe`  
-    - **[Windows]** All directories listed in the system `Path` variable  
-    - **[Linux]** Common FFmpeg installation directories: `/usr/bin`, `/usr/local/bin`, `/usr/share`  
-      
-    If FFmpeg is not found in any of these locations, an exception will be thrown.  
-2. The FFmpeg working directory is set to the application root directory by default, and a `tmp` directory is created for FFmpeg temporary files.  
 
-### **Build FFmpeg Execution Parameters**  
-For desktop recording:  
+Third-party packages built with MinGW may also require `libstdc++-6.dll` and its dependencies. Missing dependencies cause loading to fail even when the FFmpeg DLLs are present.  
+Dependencies in custom Linux/macOS library directories must be discoverable by the system dynamic linker.  
+
+Additionally, if you need to use SkiaSharp in a Linux environment, you need an installation package:  
+```sh
+dotnet add package SkiaSharp.NativeAssets.Linux.NoDependencies
+```
+
+## Basic usage
+
 ```csharp
-FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
-    .WithDesktopInput()
-    .WithRectangle(new SKRect(0, 0, 1920, 1080))
-    .WithFramerate(60)
-    .WithImageHandle((frameIndex, bitmap) =>
-    {
-        if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))
-        {
-            bitmap.Dispose();
-        }
-    })
-    .WithOutputQuality(OutputQuality.Medium)
-    .Build();
-    //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1));
-```
-### Explanation:  
-- **Input Source:** Desktop  
-- **Recording Area:** From the top-left corner (0,0), capturing a 1920x1080 region  
-- **Frame Handling:** When an image frame is generated, it is passed to `frameChannel` via `WithImageHandle`  
-
-To use other input sources, simply call the corresponding API, such as `WithCameraInput()`.  
-
-### **Complete Demo**  
-Below is a complete demo for screen recording:  
-```
-using System.Diagnostics;
-using System.Threading.Channels;
-using FFMpegCore;
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder;
 using WithSalt.FFmpeg.Recorder.Models;
 
-namespace ConsoleAppDemo
-{
-    internal class Program
+using var cancellation = new CancellationTokenSource();
+
+var recording = new FFmpegArgumentsBuilder()
+    .WithFileInput()
+    .WithFiles("01.mp4", "02.mp4")
+    .WithOutputSize(1280, 720)
+    .WithOutputQuality(OutputQuality.High)
+    .WithImageHandle((frameIndex, bitmap) =>
     {
-        static async Task Main(string[] args)
+        using (bitmap)
         {
-            if (Directory.Exists("output"))
-            {
-                Directory.Delete("output", true);
-            }
-            Directory.CreateDirectory("output");
-
-            //使用默认的ffmpeg加载器
-            FFmpegHelper.SetDefaultFFmpegLoador();
-
-            Channel<(long frameIndex, SKBitmap data)> frameChannel = Channel.CreateBounded<(long frameIndex, SKBitmap data)>(
-                new BoundedChannelOptions(10)
-                {
-                    FullMode = BoundedChannelFullMode.Wait
-                });
-
-            //计算FPS
-            int uiFrameCount = 0;
-            Stopwatch lastUiFpsUpdate = Stopwatch.StartNew();
-            Stopwatch totalUiFpsUpdate = Stopwatch.StartNew();
-            int currentUiFps = 0;
-            long totalUiFps = 0;
-
-            // 启动写入任务
-            var cts = new CancellationTokenSource();
-            var writeTask = Task.Run(async () =>
-            {
-                totalUiFpsUpdate.Restart();
-
-                while (!cts.IsCancellationRequested && await frameChannel.Reader.WaitToReadAsync(cts.Token))
-                {
-                    SKBitmap? latestBitmap = null;
-                    long frameIndex = 0;
-
-                    // 取出所有可用帧，只保留最后一帧
-                    while (frameChannel.Reader.TryRead(out (long frameIndex, SKBitmap bitmap) data))
-                    {
-                        latestBitmap?.Dispose();
-                        latestBitmap = data.bitmap;
-                        frameIndex = data.frameIndex;
-                    }
-
-                    try
-                    {
-                        if (latestBitmap != null)
-                        {
-                            // 更新FPS计数器
-                            uiFrameCount++;
-                            if (lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
-                            {
-                                currentUiFps = uiFrameCount;
-                                totalUiFps += uiFrameCount;
-                                uiFrameCount = 0;
-                                lastUiFpsUpdate.Restart();
-
-                                TimeSpan totalElapsed = totalUiFpsUpdate.Elapsed;
-                                int avgFps = (int)(totalUiFps / Math.Max(1, totalElapsed.TotalSeconds));
-
-                                Console.Write($"\r{(int)totalElapsed.TotalHours:00}:{totalElapsed.Minutes:00}:{totalElapsed.Seconds:00} | Current FPS: {currentUiFps} | AVG FPS: {avgFps}   ");
-                            }
-
-                            //Console.WriteLine("收到图片帧");
-                            SaveBitmapAsImage(latestBitmap, $"output/{frameIndex}.jpg", SKEncodedImageFormat.Jpeg, 100);
-                        }
-                    }
-                    finally
-                    {
-                        latestBitmap?.Dispose();
-                    }
-                }
-            });
-
-            await DesktopTest(frameChannel);
-            Console.WriteLine("Done.");
+            // Process the bitmap synchronously, or transfer it to your bounded queue.
+            // The queue consumer must dispose it; dispose here if enqueueing fails.
         }
+    })
+    .NotifyOnProgress(progress =>
+    {
+        Console.WriteLine($"{progress.FrameIndex}: {progress.MediaTime}");
+    }, TimeSpan.FromSeconds(1));
 
-        private static Action? _cancel = null;
-
-        static async Task DesktopTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
-        {
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
-                .WithDesktopInput()
-                .WithRectangle(new SKRect(0, 0, 0, 0))
-                .WithFramerate(60)
-                .WithImageHandle((frameIndex, bitmap) =>
-                {
-                    if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))
-                    {
-                        bitmap.Dispose();
-                    }
-                })
-                .WithOutputQuality(OutputQuality.Medium)
-                .Build()
-                .CancellableThrough(out _cancel)
-                //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
-                ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
-
-            await ffmpegCmd.ProcessAsynchronously();
-        }
-
-        /// <summary>
-        /// 将 SKBitmap 保存为指定格式的图片文件
-        /// </summary>
-        /// <param name="bitmap">要保存的 SKBitmap 实例</param>
-        /// <param name="filePath">保存的文件路径</param>
-        /// <param name="imageFormat">图像格式（PNG、JPEG 等）</param>
-        /// <param name="quality">编码质量（针对有损格式，如 JPEG）</param>
-        static void SaveBitmapAsImage(SKBitmap bitmap, string filePath, SKEncodedImageFormat imageFormat, int quality)
-        {
-            if (bitmap == null)
-                throw new ArgumentNullException(nameof(bitmap));
-
-            using (SKImage image = SKImage.FromBitmap(bitmap))
-            using (SKData data = image.Encode(imageFormat, quality))
-            using (FileStream stream = File.OpenWrite(filePath))
-            {
-                data.SaveTo(stream);
-            }
-        }
-    }
+try
+{
+    await recording.ProcessAsynchronously(cancellation.Token);
+}
+catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+{
+    // Capture has stopped and the native session has been released.
 }
 
+// To stop an active run: cancellation.Cancel();
+// Synchronous alternative: recording.ProcessSynchronously(cancellation.Token);
 ```
 
-## **Development Recommendations**  
-1. **Use an asynchronous queue to process image frames**  
-   - Processing frames (e.g., image recognition) is usually slower than FFmpeg fetching video frames. Using an asynchronous queue ensures smooth processing and allows frame-dropping strategies for better performance.  
-2. **Store FFmpeg in the runtime directory**  
-   - This enables automatic searching and keeps the application directory organized. Example: `runtimes\win-x64\bin\ffmpeg.exe`  
+## High-performance capture
 
-### **More Complete Examples**  
-[https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos)  
+The default `WithImageHandle` callback preserves independent ownership. The library reuses released native pixel memory and caches at most one idle buffer per session; pixels retained by callers or shared Skia references are never overwritten. Use a bounded queue for asynchronous processing and dispose consumed or discarded bitmaps promptly.
 
-## License  
-- This software is licensed under the MIT open-source license.  
-- This software uses FFmpeg (https://ffmpeg.org), which is protected under the LGPL/GPL license.  
+For synchronous readers, `WithImageViewHandle` provides a read-only image view valid only during the callback and reuses a bitmap and its conversion buffer. Same-size BGRA input with a positive stride uses a view of the decoded pixels, removing the full-frame copy:
 
-## **Acknowledgments**  
-Special thanks to these great open-source projects:  
-- **FFmpeg**: [https://git.ffmpeg.org/gitweb/ffmpeg.git](https://git.ffmpeg.org/gitweb/ffmpeg.git)  
-- **FFMpegCore**: [https://github.com/rosenbjerg/FFMpegCore](https://github.com/rosenbjerg/FFMpegCore)  
-- **SkiaSharp**: [https://github.com/mono/SkiaSharp](https://github.com/mono/SkiaSharp)  
-- **FlashCap**: [https://github.com/kekyo/FlashCap](https://github.com/kekyo/FlashCap)
+```csharp
+var recording = new FFmpegArgumentsBuilder()
+    .WithDesktopInput()
+    .WithRectangle(SKRect.Create(0, 0, 1920, 1080))
+    .WithFramerate(60)
+    .WithFpsMode(FpsMode.Drop)
+    .WithOutputFramerate(30)
+    .WithDecoderThreads(1)
+    .WithImageViewHandle((index, bitmap) =>
+    {
+        // Read synchronously here. The bitmap is valid only during this callback.
+        // Do not dispose, modify, retain or queue it. Use bitmap.Copy() for ownership.
+    });
+await recording.ProcessAsynchronously(cancellation.Token);
+```
+
+The two image callbacks replace each other; the last configuration takes effect. Borrowed callbacks and frame filters run on the decoding thread; exceptions stop the session.
+
+`WithFrameFilter(index => index % 2 == 0)` filters output frames **before** image allocation and conversion, allowing on-demand sampling or deciding whether to accept the next frame based on consumer load. Returning false still advances frame indexes and progress, so indexes delivered to image callbacks may have gaps. Filtering does not skip compressed-video decoding and is not invoked without an image callback.
+
+Reduce source dimensions/FPS and specify the desktop region first to avoid capturing the entire virtual desktop and then scaling it down. Use `FpsMode.Drop` when only the latest image is needed and `OutputQuality.Low` when scaling cost matters. `WithDecoderThreads(0)` lets FFmpeg choose the thread count; `1` reduces thread/frame-buffer overhead. Fewer threads may reduce compressed-video throughput, so test with your actual input. Live latency presets allow only slice threading to avoid additional frame-threading delay.
+
+Three microbenchmark runs on the same machine measured a roughly 3–12× speedup in the conversion path with the default owning callback, with managed allocations dropping from about 448 to 112 bytes per frame. The borrowed path allocated 0 managed bytes per frame after warmup.
+
+## Input configuration
+
+Each configuration below can be extended with `WithImageHandle`, `WithOutputSize` and an execution method:
+
+```csharp
+var rtsp = new FFmpegArgumentsBuilder().WithStreamInput()
+    .WithRtsp("rtsp://host/stream")
+    .WithTcp() // TCP by default; use WithUdp() for UDP
+    .WithTimeout(10)
+    .WithProbeSize(1024 * 1024);
+
+var http = new FFmpegArgumentsBuilder().WithStreamInput()
+    .WithHttp("https://host/playlist.m3u8")
+    .WithTimeout(10);
+
+var rtmp = new FFmpegArgumentsBuilder().WithStreamInput()
+    .WithRtmp("rtmp://host/live/stream")
+    .WithLiveType(RtmpLiveType.Live);
+
+var camera = new FFmpegArgumentsBuilder().WithCameraInput()
+    .WithDeviceName("Camera name") // Linux: /dev/video0; macOS: default, 0 or an AVFoundation name
+    .WithVideoSize(1280, 720)
+    .WithFramerate(30);
+
+var desktop = new FFmpegArgumentsBuilder().WithDesktopInput()
+    .WithRectangle(SKRect.Create(0, 0, 1280, 720))
+    .WithFramerate(30);
+```
+
+Call `FFmpegNative.EnumerateCameraDevices()` to enumerate cameras through FFmpeg's native `avdevice_list_input_sources` API. Pass the returned `Name` directly to `WithDeviceName`; Windows uses DirectShow and Linux uses V4L2.
+
+FFmpeg AVFoundation on macOS does not implement this enumeration API; `EnumerateCameraDevices()` throws `NotSupportedException`. Select a camera with `WithDeviceName("default")`, a video device index such as `"0"`, or its AVFoundation name. Supply only the video selector; Recorder appends `:none` to disable audio.
+
+Omit `WithRectangle`, or pass `SKRect.Create(0, 0, 0, 0)`, to use the native device's automatic capture bounds. Desktop Demo accepts `0,0`, `0,0,,`, and `0,0,0,0`; an explicit `x,y,width,height` area requires both dimensions to be positive integers. On Windows, automatic bounds cover the entire virtual desktop, potentially spanning multiple monitors. `WithOutputSize` scales the output and does not limit the captured region. Supply an explicit position and size to capture one monitor or a smaller area.
+
+On macOS, desktop capture defaults to the first AVFoundation display (`Capture screen 0:none`). `WithRectangle` uses nonnegative pixel coordinates within that display and must fit its captured dimensions; cropping precedes `WithOutputSize` scaling. Automatic bounds require origin `(0, 0)`. For Retina displays, use the captured frame's pixel dimensions rather than logical point dimensions.
+
+Pass device names directly without command-line quoting. Input availability depends on device drivers, the protocols/decoders enabled in the FFmpeg build and TLS support.
+
+`WithTimeout` is measured in seconds and applies to opening, probing and each blocking read; zero disables the deadline. Cancellation uses FFmpeg's interrupt callback to interrupt native I/O that supports it. User callbacks, system drivers and third-party protocol implementations that ignore interrupts cannot be forcibly terminated. Await the execution task before treating capture as stopped.
+
+## Output semantics
+
+| Setting | Behavior |
+| --- | --- |
+| Passthrough | Emit each decoded frame once; progress uses normalized media time |
+| VFR | Preserve variable frame intervals and drop duplicate/regressing timestamps; output framerate cannot be specified |
+| CFR | Sample at the target rate, duplicating the previous frame or dropping frames as needed; output framerate is required |
+| Auto | CFR when an output rate is specified; otherwise VFR |
+| Drop | Never duplicate; cap the rate if specified, otherwise behave as VFR |
+| WithOutputFramerate | Select CFR if no mode is specified; an explicit Passthrough/VFR mode is mutually exclusive with an output framerate |
+| OutputQuality.High / Medium / Low | Lanczos / Bilinear / Fast Bilinear scaling. All levels convert directly to BGRA without a lossy MJPEG intermediate |
+
+Framerates must be finite, greater than 0 and at most 1000. File frame extraction runs as fast as possible without wall-clock playback pacing; CFR describes the media timeline and does not guarantee callbacks arrive at equal real-time intervals. Hardware acceleration and HDR tone mapping are not implemented; higher-bit-depth input is converted to 8-bit BGRA.
+
+Non-file inputs retain the High low-latency preset by default. Medium uses nobuffer, discardcorrupt, low_delay and a smaller probe window; High further reduces probing, enables direct I/O and adjusts RTSP buffering. Aggressive settings may prevent input detection; try `WithLatencyOptimizationLevel(LatencyOptimizationLevel.None)` first if problems occur. An explicit `WithProbeSize` overrides the preset value.
+
+`NotifyOnProgress` reports `FFmpegProgress`: frame count, media time across files, current input index, current input media time and current file duration (if known). Live inputs do not provide duration; sequential-file inputs do not open all files in advance to calculate an overall percentage. Callbacks are throttled by elapsed real time, with a final report for the last frame on normal completion.
+
+## Development and validation
+
+```sh
+dotnet build src/WithSalt.FFmpeg.Recorder.slnx -c Release
+dotnet run --project tests/WithSalt.FFmpeg.Recorder.Tests -f net8.0 -c Release
+dotnet run --project src/Demos/ConsoleAppDemo -c Release -- --file path/to/video.mp4
+```
+
+The tests are an executable integration suite: any failed assertion returns a nonzero exit code, with no ffmpeg.exe required. Pass `-- --native-path <directory>` to test explicit configuration. Self-contained publishing runs the same suite on Linux ARM and macOS without an SDK. For LoongArch64, publish with `--self-contained false -p:UseAppHost=false` and run the DLL using `dotnet` on the target machine.
+
+## License
+
+This project uses the [MIT License](LICENSE), which permits use, copying, modification and distribution, including commercial use, provided the original copyright and license notices are retained.
+
+Third-party dependencies retain their own licenses. The consuming project selects and installs FFmpeg native libraries; their licenses and distribution obligations depend on the chosen build. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for dependency licenses and related details.

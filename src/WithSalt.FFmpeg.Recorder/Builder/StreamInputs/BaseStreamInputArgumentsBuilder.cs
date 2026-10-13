@@ -1,41 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using FFMpegCore.Arguments;
+using System.Globalization;
+using WithSalt.FFmpeg.Recorder.Native;
 
-namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs
+namespace WithSalt.FFmpeg.Recorder.Builder.StreamInputs;
+
+internal abstract class BaseStreamInputArgumentsBuilder : BaseInputArgumentsBuilder
 {
-    internal abstract class BaseStreamInputArgumentsBuilder : BaseInputArgumentsBuilder
+    private readonly Uri _uri;
+    protected readonly Dictionary<string, string> InputOptions = new();
+    private uint _timeout;
+    protected BaseStreamInputArgumentsBuilder(Uri uri)
     {
-        protected readonly Uri _uri;
-
-        public BaseStreamInputArgumentsBuilder(Uri uri)
-        {
-            if (uri == null)
-                throw new ArgumentNullException(nameof(uri), "The parameter uri cannot be empty.");
-            _uri = uri;
-        }
-
-        protected void ResetProbeSize(List<IArgument> inputArgumentList, uint probeSize)
-        {
-            if (probeSize == 0)
-                return;
-
-            if (inputArgumentList.Count == 0)
-                return;
-
-            foreach (var item in this._latencyOptimizationContainer.Container)
-            {
-                for (int i = 0; i < item.Value.Count; i++)
-                {
-                    if (item.Value[i].Text.StartsWith("-probesize", StringComparison.OrdinalIgnoreCase))
-                    {
-                        item.Value[i] = new CustomArgument($"-probesize {probeSize}");
-                        continue;
-                    }
-                }
-            }
-            return;
-        }
+        ArgumentNullException.ThrowIfNull(uri);
+        _uri = uri;
     }
+    protected void SetTimeout(uint timeout) => Change(() => _timeout = timeout);
+    protected void SetProbeSize(uint probeSize)
+    {
+        if (probeSize != 0 && probeSize < 32) throw new ArgumentOutOfRangeException(nameof(probeSize), "FFmpeg requires at least 32 probe bytes.");
+        Change(() =>
+        {
+            if (probeSize == 0) InputOptions.Remove("probesize");
+            else InputOptions["probesize"] = probeSize.ToString(CultureInfo.InvariantCulture);
+        });
+    }
+    protected override InputSpec[] CreateInputs()
+        => [new InputSpec(_uri.AbsoluteUri, null, false, new Dictionary<string, string>(InputOptions), _timeout)];
 }

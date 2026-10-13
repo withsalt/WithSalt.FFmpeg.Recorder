@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -18,7 +18,7 @@ using Avalonia.Threading;
 using DesktopAppDemo.Models;
 using DesktopAppDemo.Utils;
 using DesktopAppDemo.Views;
-using FFMpegCore;
+using WithSalt.FFmpeg.Recorder.Interface;
 using FlashCap;
 using Microsoft.Extensions.Logging;
 using NLog;
@@ -31,26 +31,37 @@ namespace DesktopAppDemo.ViewModels
     internal partial class MainWindowViewModel : ViewModelBase
     {
         private readonly ILogger<MainWindowViewModel> _logger;
-
-        private Action? _cancel = null;
-        private FFMpegArgumentProcessor? _currentProcessor;
+        private IFFmpegArgumentsBuilder? _currentProcessor;
         private CancellationTokenSource? _cts;
         private Task? _mainTask;
         private Task? _frameConsumerTask;
+        private readonly SemaphoreSlim _recordingGate = new(1, 1);
+        private volatile bool _isClosing;
         private BitmapSwitcher _bitmapSwitcher = new BitmapSwitcher();
 
         //Frame Task
         private int _uiFrameCount = 0;
         private readonly Stopwatch _lastUiFpsUpdate = Stopwatch.StartNew();
         private int _currentUiFps = 0;
-        //限制UI更新频率
-        private static readonly int _limitFpsTime = 1000 / 60;
+        private static readonly long PreviewIntervalTicks = Stopwatch.Frequency / 60;
+        private long _nextPreviewTimestamp;
+        private SKFont? _overlayFont;
+        private readonly SKPaint _overlayPaint = new() { Color = SKColors.White, IsAntialias = true };
+        private readonly SKPaint _overlayStrokePaint = new()
+        {
+            Color = SKColors.Black, Style = SKPaintStyle.Stroke, IsAntialias = true
+        };
+        private long _overlaySecond = -1;
+        private int _overlayFps = -1;
+        private string _overlayTimeText = string.Empty, _overlayFpsText = string.Empty;
 
         private readonly Channel<SKBitmap> _frameChannel = Channel.CreateBounded<SKBitmap>(
-            new BoundedChannelOptions(10)
+            new BoundedChannelOptions(1)
             {
-                FullMode = BoundedChannelFullMode.Wait
-            });
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = true
+            }, itemDropped: bitmap => bitmap.Dispose());
 
         private SKTypeface SKTypeface { get; }
 
@@ -315,20 +326,30 @@ namespace DesktopAppDemo.ViewModels
 
         public void Exit()
         {
-            IClassicDesktopStyleApplicationLifetime? lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-            lifetime?.Shutdown();
+            MainWindow.Close();
         }
 
-        public void Closing()
+        public async Task ClosingAsync()
         {
+            _isClosing = true;
+            await _recordingGate.WaitAsync();
             try
             {
-                StopRecord(true).ConfigureAwait(false)
-                    .GetAwaiter().GetResult();
+                await StopRecord();
             }
-            catch { }
-
-            LogManager.Shutdown();
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "退出时清理录制资源失败");
+            }
+            finally
+            {
+                _overlayFont?.Dispose();
+                _overlayPaint.Dispose();
+                _overlayStrokePaint.Dispose();
+                SKTypeface.Dispose();
+                _recordingGate.Release();
+                LogManager.Shutdown();
+            }
         }
 
         private async Task ResetUIStateAsync()
@@ -383,13 +404,15 @@ namespace DesktopAppDemo.ViewModels
         public async Task Start()
         {
             // 防止重复点击
-            if (_isProcessing)
+            if (_isProcessing || _isClosing)
                 return;
 
             _isProcessing = true;
+            await _recordingGate.WaitAsync();
 
             try
             {
+                if (_isClosing) return;
                 if (!IsRunning)
                 {
                     // 输入验证
@@ -425,6 +448,7 @@ namespace DesktopAppDemo.ViewModels
             }
             finally
             {
+                _recordingGate.Release();
                 _isProcessing = false;
             }
         }
@@ -437,6 +461,8 @@ namespace DesktopAppDemo.ViewModels
         {
             // 停止现有任务
             await StopRecord().ConfigureAwait(false);
+            if (_isClosing) return;
+            _nextPreviewTimestamp = 0;
 
             try
             {
@@ -449,11 +475,6 @@ namespace DesktopAppDemo.ViewModels
                     4 => BuildFilesProcessor(),
                     _ => throw new InvalidOperationException("未知输入类型")
                 };
-
-                if (_cancel == null)
-                    throw new InvalidOperationException("取消操作未初始化");
-
-                _logger.LogInformation($"FFMpeg参数：ffmpeg {_currentProcessor.Arguments}");
                 _cts = new CancellationTokenSource();
 
                 string initMsg = Thread.CurrentThread.CurrentCulture.Name == "zh-CN" ? "初始化...请稍后..." : "Loading...Please waitting ...";
@@ -474,18 +495,17 @@ namespace DesktopAppDemo.ViewModels
 
                 // 启动任务
                 _frameConsumerTask = ConsumeFramesAsync(_cts.Token);
-                _mainTask = ProcessFFMpegAsync(_cts.Token).ContinueWith(async (t) =>
-                {
-                    await ResetUIStateAsync();
-                });
+                _mainTask = ProcessFFMpegAsync(_currentProcessor, _cts);
 
                 // 检查是否立即失败
                 await Task.WhenAny(_mainTask, Task.Delay(500, _cts.Token)).ConfigureAwait(false);
                 if (_mainTask.IsFaulted)
                     throw _mainTask.Exception?.InnerException ?? new Exception("启动失败");
+                if (_mainTask.IsCompleted) return;
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    if (_mainTask?.IsCompleted != false) return;
                     this.BtnName = "关闭";
                     this.Tips = "工作中...";
                     this.BtnBackgroundColor = Brushes.Red;
@@ -500,42 +520,30 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
-        private async Task StopRecord(bool isClosing = false)
+        private async Task StopRecord()
         {
+            var cancellation = _cts;
             try
             {
-                if (_cts == null)
+                if (cancellation == null)
                     return;
 
                 _logger.LogInformation("停止录制...");
-                _cancel?.Invoke();
-                _cts.Cancel();
+                cancellation.Cancel();
 
                 // 等待任务完成
                 var tasks = new List<Task>();
-                if (_mainTask != null && !_mainTask.IsCompleted && !_mainTask.IsFaulted)
+                if (_mainTask != null)
                     tasks.Add(_mainTask);
-                if (_frameConsumerTask != null && !_frameConsumerTask.IsCompleted && !_frameConsumerTask.IsFaulted)
+                if (_frameConsumerTask != null)
                     tasks.Add(_frameConsumerTask);
 
                 var allTasks = Task.WhenAll(tasks);
-                if (isClosing)
-                {
-                    await allTasks.ConfigureAwait(false);
-                }
-                else
-                {
-                    var timeoutTask = Task.Delay(3000);
-                    var completedTask = await Task.WhenAny(allTasks, timeoutTask).ConfigureAwait(false);
-                    if (completedTask == timeoutTask)
-                        _logger.LogWarning("停止录制超时");
-                }
-
-                // 清空帧队列并释放资源
-                while (_frameChannel.Reader.TryRead(out var bitmap))
-                {
-                    bitmap?.Dispose();
-                }
+                await allTasks.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellation?.IsCancellationRequested == true)
+            {
+                _logger.LogInformation("录制已取消");
             }
             catch (Exception ex)
             {
@@ -544,24 +552,28 @@ namespace DesktopAppDemo.ViewModels
             }
             finally
             {
+                // 工作线程结束后，即使发生错误也释放队列中剩余的帧。
+                while (_frameChannel.Reader.TryRead(out var bitmap))
+                    bitmap.Dispose();
+
                 // 释放资源
                 _mainTask?.Dispose();
                 _frameConsumerTask?.Dispose();
-                _cts?.Dispose();
-                _bitmapSwitcher.Dispose();
+                cancellation?.Dispose();
 
                 _mainTask = null;
                 _frameConsumerTask = null;
                 _cts = null;
-                _cancel = null;
                 _currentProcessor = null;
 
-                await ResetUIStateAsync();
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    ResetUIState();
+                    _bitmapSwitcher.Dispose();
+                });
             }
         }
 
-        private Stopwatch _imageUpdateSt = Stopwatch.StartNew();
-        private long _lastImageUpdate = 0;
         private readonly object _imageSync = new();
 
         private async Task ConsumeFramesAsync(CancellationToken token)
@@ -592,7 +604,7 @@ namespace DesktopAppDemo.ViewModels
                 }
                 _logger.LogInformation("帧处理队列已退出");
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 _logger.LogInformation("帧处理队列已取消");
             }
@@ -603,30 +615,15 @@ namespace DesktopAppDemo.ViewModels
             }
         }
 
-        private async Task ProcessFFMpegAsync(CancellationToken token)
+        private async Task ProcessFFMpegAsync(IFFmpegArgumentsBuilder recording, CancellationTokenSource cancellation)
         {
             try
             {
-                await Task.Run(async () =>
-                {
-                    try
-                    {
-                        _currentProcessor?.ProcessSynchronously();
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        _logger.LogInformation("录制已取消");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "FFMpeg处理错误");
-                        await ResetAndShowError("错误", "操作失败: 无发启动录制，请检查日志中的详细信息");
-                    }
-                }, token);
+                await recording.ProcessAsynchronously(cancellation.Token).ConfigureAwait(false);
 
                 _logger.LogInformation("FFMpeg采集线程已停止");
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
                 _logger.LogInformation("录制已取消");
             }
@@ -635,15 +632,15 @@ namespace DesktopAppDemo.ViewModels
                 _logger.LogError(ex, "FFMpeg处理错误");
                 await ResetAndShowError("错误", "操作失败: 请检查日志中的详细信息");
             }
+            finally
+            {
+                cancellation.Cancel();
+                await ResetUIStateAsync();
+            }
         }
 
         private async Task UpdateUIAsync(SKBitmap bitmap)
         {
-            // 限制UI更新频率
-            if ((_imageUpdateSt.ElapsedMilliseconds - _lastImageUpdate) < _limitFpsTime)
-                return;
-            // 更新图像和计时器
-            _lastImageUpdate = _imageUpdateSt.ElapsedMilliseconds;
             // 绘制FPS
             DrawFps(bitmap, _currentUiFps);
 
@@ -682,15 +679,9 @@ namespace DesktopAppDemo.ViewModels
 
                 using (var lockedBitmap = tempImage.Lock())
                 {
-                    using (var surface = SKSurface.Create(info, lockedBitmap.Address, lockedBitmap.RowBytes))
-                    {
-                        if (surface != null)
-                        {
-                            surface.Canvas.Clear();
-                            surface.Canvas.DrawBitmap(skBitmap, 0, 0);
-                            surface.Canvas.Flush();
-                        }
-                    }
+                    using var pixels = skBitmap.PeekPixels();
+                    if (pixels == null || !pixels.ReadPixels(info, lockedBitmap.Address, lockedBitmap.RowBytes))
+                        throw new InvalidOperationException("Cannot copy the preview pixels.");
                 }
 
                 _bitmapSwitcher.CurrentBitmap = tempImage;
@@ -707,7 +698,7 @@ namespace DesktopAppDemo.ViewModels
 
         #region Helper Methods
 
-        private FFMpegArgumentProcessor BuildCameraProcessor()
+        private IFFmpegArgumentsBuilder BuildCameraProcessor()
         {
             (int width, int height) = ParseResolution();
 
@@ -719,20 +710,19 @@ namespace DesktopAppDemo.ViewModels
                 throw new Exception("获取设备描述符失败");
             }
 
-            FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder args = new FFmpegArgumentsBuilder()
                 .WithCameraInput()
                 .WithDeviceName(deviceName)
                 .WithVideoSize((uint)Characteristics!.Width, (uint)Characteristics.Height)
-                .WithFramerate((uint)Characteristics.FramesPerSecond.Numerator)
+                .WithFramerate((double)Characteristics.FramesPerSecond.Numerator / Characteristics.FramesPerSecond.Denominator)
                 .WithImageHandle(OnImageArrived)
+                .WithFrameFilter(ShouldConvertPreviewFrame)
                 .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
-                .WithOutputSize(width, height)
-                .Build()
-                .CancellableThrough(out _cancel);
+                .WithOutputSize(width, height);
             return args;
         }
 
-        private FFMpegArgumentProcessor BuildStreamProcessor()
+        private IFFmpegArgumentsBuilder BuildStreamProcessor()
         {
             (int width, int height) = ParseResolution();
 
@@ -743,48 +733,45 @@ namespace DesktopAppDemo.ViewModels
 
             if (uri.Scheme.StartsWith("rtsp", StringComparison.OrdinalIgnoreCase))
             {
-                FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                IFFmpegArgumentsBuilder args = new FFmpegArgumentsBuilder()
                     .WithStreamInput()
                     .WithRtsp(uri)
                     .WithTimeout(3)
                     .WithImageHandle(OnImageArrived)
+                    .WithFrameFilter(ShouldConvertPreviewFrame)
                     .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
-                    .WithOutputSize(width, height)
-                    .Build()
-                    .CancellableThrough(out _cancel);
+                    .WithOutputSize(width, height);
                 return args;
             }
             else if (uri.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             {
-                FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                IFFmpegArgumentsBuilder args = new FFmpegArgumentsBuilder()
                     .WithStreamInput()
                     .WithHttp(uri)
                     .WithTimeout(3)
                     .WithImageHandle(OnImageArrived)
+                    .WithFrameFilter(ShouldConvertPreviewFrame)
                     .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                     .WithOutputSize(width, height)
-                    .WithLatencyOptimizationLevel(LatencyOptimizationLevel.Medium)
-                    .Build()
-                    .CancellableThrough(out _cancel);
+                    .WithLatencyOptimizationLevel(LatencyOptimizationLevel.Medium);
                 return args;
             }
             else if (uri.Scheme.StartsWith("rtmp", StringComparison.OrdinalIgnoreCase))
             {
-                FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+                IFFmpegArgumentsBuilder args = new FFmpegArgumentsBuilder()
                     .WithStreamInput()
                     .WithRtmp(uri)
                     .WithImageHandle(OnImageArrived)
+                    .WithFrameFilter(ShouldConvertPreviewFrame)
                     .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
                     .WithOutputSize(width, height)
-                    .WithLatencyOptimizationLevel(LatencyOptimizationLevel.Medium)
-                    .Build()
-                    .CancellableThrough(out _cancel);
+                    .WithLatencyOptimizationLevel(LatencyOptimizationLevel.Medium);
                 return args;
             }
             throw new Exception("Unsupported URI scheme");
         }
 
-        private FFMpegArgumentProcessor BuildDesktopProcessor()
+        private IFFmpegArgumentsBuilder BuildDesktopProcessor()
         {
             if (!ScreenParamsHelper.TryParse(this.DesktopSource, out var message, out var rectangle) || rectangle == null)
             {
@@ -793,19 +780,18 @@ namespace DesktopAppDemo.ViewModels
 
             (int width, int height) = ParseResolution();
 
-            FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder args = new FFmpegArgumentsBuilder()
                 .WithDesktopInput()
                 .WithRectangle(rectangle.Value)
                 .WithFramerate(60)
                 .WithImageHandle(OnImageArrived)
+                .WithFrameFilter(ShouldConvertPreviewFrame)
                 .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
-                .WithOutputSize(width, height)
-                .Build()
-                .CancellableThrough(out _cancel);
+                .WithOutputSize(width, height);
             return args;
         }
 
-        private FFMpegArgumentProcessor BuildFilesProcessor()
+        private IFFmpegArgumentsBuilder BuildFilesProcessor()
         {
             if (string.IsNullOrWhiteSpace(this.SelectedFilePath))
             {
@@ -815,18 +801,23 @@ namespace DesktopAppDemo.ViewModels
 
             (int width, int height) = ParseResolution();
 
-            FFMpegArgumentProcessor args = new FFmpegArgumentsBuilder()
+            IFFmpegArgumentsBuilder args = new FFmpegArgumentsBuilder()
                 .WithFileInput()
                 .WithFiles(files)
                 .WithImageHandle(OnImageArrived)
+                .WithFrameFilter(ShouldConvertPreviewFrame)
                 .WithOutputQuality(this.SelectOutputQuality ?? OutputQuality.High)
-                .WithOutputSize(width, height)
-                .Build()
-                .CancellableThrough(out _cancel);
+                .WithOutputSize(width, height);
             return args;
         }
 
-        private DateTime _lastOnArrivedTime = DateTime.UtcNow;
+        private bool ShouldConvertPreviewFrame(long frameIndex)
+        {
+            long now = Stopwatch.GetTimestamp();
+            if (now < _nextPreviewTimestamp) return false;
+            _nextPreviewTimestamp = now + PreviewIntervalTicks;
+            return true;
+        }
 
         private void OnImageArrived(long frameIndex, SKBitmap? bitmap)
         {
@@ -840,28 +831,21 @@ namespace DesktopAppDemo.ViewModels
                 if (!_frameChannel.Writer.TryWrite(bitmap))
                 {
                     bitmap.Dispose();
-
-                    if ((DateTime.UtcNow - _lastOnArrivedTime).TotalSeconds > 10)
-                    {
-                        _logger.LogWarning("帧队列堆积，写入帧队列失败。");
-                        _lastOnArrivedTime = DateTime.UtcNow;
-                    }
-                }
-                else
-                {
-                    _lastOnArrivedTime = DateTime.UtcNow;
                 }
             }
             catch (Exception ex)
             {
+                bitmap.Dispose();
                 _logger.LogError(ex, "帧入队失败");
             }
         }
 
         private async Task ResetAndShowError(string title, string content)
         {
+            if (_isClosing) return;
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
+                if (_isClosing) return;
                 await MessageBox.Warning(title, content);
                 await ResetUIStateAsync();
             });
@@ -921,7 +905,7 @@ namespace DesktopAppDemo.ViewModels
             {
                 canvas.Clear(SKColors.White);
 
-                SKFont font = new SKFont()
+                using SKFont font = new SKFont()
                 {
                     Size = GetBaseFontSize(48, bitmap.Height),
                     Typeface = typeface ?? SKTypeface.Default,
@@ -950,24 +934,31 @@ namespace DesktopAppDemo.ViewModels
             {
                 float fontSize = GetBaseFontSize(30, bitmap.Height);
 
-                var font = new SKFont(this.SKTypeface, fontSize);
+                var font = _overlayFont ??= new SKFont(this.SKTypeface, fontSize);
+                font.Size = fontSize;
                 font.GetFontMetrics(out var metrics);
-
-                var paint = new SKPaint { Color = SKColors.White, IsAntialias = true };
-                var strokePaint = new SKPaint
-                {
-                    Color = SKColors.Black,
-                    Style = SKPaintStyle.Stroke,
-                    StrokeWidth = Math.Max(2, fontSize / 15),
-                    IsAntialias = true
-                };
+                var paint = _overlayPaint;
+                var strokePaint = _overlayStrokePaint;
+                strokePaint.StrokeWidth = Math.Max(2, fontSize / 15);
 
                 float x = 10;
                 float startY = -metrics.Ascent;
                 float lineHeight = fontSize * 1.2f;
 
-                var timeText = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                var fpsText = $"FPS: {fps}";
+                var now = DateTime.Now;
+                long second = now.Ticks / TimeSpan.TicksPerSecond;
+                if (_overlaySecond != second)
+                {
+                    _overlayTimeText = now.ToString("yyyy-MM-dd HH:mm:ss");
+                    _overlaySecond = second;
+                }
+                if (_overlayFps != fps)
+                {
+                    _overlayFpsText = $"FPS: {fps}";
+                    _overlayFps = fps;
+                }
+                var timeText = _overlayTimeText;
+                var fpsText = _overlayFpsText;
 
                 canvas.DrawText(timeText, x, startY, font, strokePaint);
                 canvas.DrawText(timeText, x, startY, font, paint);

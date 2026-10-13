@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -22,12 +22,12 @@ namespace WithSalt.FFmpeg.Recorder.Models
         CFR = 2,
 
         /// <summary>
-        /// 自动，FFmpeg 根据输入流的特性自动选择最合适的帧率模式
+        /// 有输出帧率时使用 CFR，否则使用 VFR
         /// </summary>
         Auto = 3,
 
         /// <summary>
-        /// 丢弃
+        /// 只丢帧、不补帧；指定输出帧率时限制采样频率，否则与 VFR 相同
         /// </summary>
         Drop = 4
     }

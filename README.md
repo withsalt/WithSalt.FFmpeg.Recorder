@@ -1,245 +1,189 @@
-# WithSalt.FFMpeg.Recorder  
-基于FFmpeg实现的高性能视频录制框架，支持从多种输入源（本地视频、摄像头、网络流、桌面等）中提取连续的图像帧。  
+# WithSalt.FFmpeg.Recorder
 
-[View English](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/blob/main/README_en.md)  
+通过 FFmpeg 解码视频，输出连续的 SkiaSharp `SKBitmap` 图像帧。支持本地文件、顺序多文件、摄像头、桌面、RTSP、HTTP/HLS 和 RTMP 输入。
 
-## 核心功能  
-
-**受支持的输入源**  
-- 本地视频文件，支持多文件
-- 摄像头实时捕获
-- 流媒体（RTSP、RTMP、HLS等）
-- 桌面屏幕录制（Windows、Linux XOrg）
-
-**受支持的平台和操作系统**  
-
-| OS  |  Runtime   |  x86  |  x64  |  ARM  | ARM64  | LoongArch64  |
-| ------------ | ------------ | :------------: | :------------: | :------------: | :------------: | :------------: |
-| Windows  | .NET Core 3.1+  |  √  |  √  |     |      |      |
-| Linux    | .NET Core 3.1+  |     |  √  |  √  |  √   |  √   |
+[English](README_en.md)
 
 
-## 快速开始  
+## 安装与使用
 
-### 安装Nuget包
-通过Nuget包管理器安装`WithSalt.FFmpeg.Recorder` [![NuGet Version](https://img.shields.io/nuget/v/WithSalt.FFmpeg.Recorder.svg?style=flat)](https://www.nuget.org/packages/WithSalt.FFmpeg.Recorder/)   
-或  
-通过Terminal安装：  
-```shell
+```sh
 dotnet add package WithSalt.FFmpeg.Recorder
 ```
 
-### 安装FFmpeg  
-Windows系统，可前往 https://github.com/BtbN/FFmpeg-Builds/releases 下载编译好的FFmpeg。然后将ffmpeg.exe放入应用程序根目录，或者放入下一小节中支持自动搜索的目录。  
-建议在项目配置中新增条件编译参数，在编译Windows环境运行的引用程序时，自动复制ffmpeg。  
-```
-<ItemGroup Condition="'$(OS)' == 'Windows_NT' OR '$(RuntimeIdentifier)' == 'win-x64'">
-	<None Update="runtimes\win-x64\bin\ffmpeg.exe">
-		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</None>
-</ItemGroup>
-```
-Linux系统（例如Debian;Ubuntu），通过命令：`sudo apt install ffmpeg` 安装。  
-可以参考项目中Demo示例中ffmpeg路径。  
+`WithSalt.FFmpeg.Recorder` 不包含 FFmpeg 原生库。引用方必须自行选择并安装 `FFmpeg.LGPL` 或 `FFmpeg.GPL` 或 `Sdcb.FFmpeg.runtime.windows-x64` 等ffmpeg原生库封装包（nuget上面有很多封装，任意选择一个基于ffmpeg 7.x版本以上编译的的即可）；   
+以下示例使用 `FFmpeg.LGPL` 包：
 
-### 加载FFmpeg
-工欲善其事必先利其器。在调用任何库提供的API之前，让我们先告诉程序ffmpeg所在目录，以及进行一些基础配置。  
+```sh
+dotnet add package FFmpeg.LGPL
 ```
-//使用默认的ffmpeg加载器
-FFmpegHelper.SetDefaultFFmpegLoador();
-```
-调用`SetDefaultFFmpegLoador`之后，会进行以下初始化操作：  
-1. 程序会从以下路径开始搜索ffmpeg应用程序所在位置  
-    - 优先查找与当前进程架构匹配的运行时目录，如：.\runtimes\win-x64\bin\ffmpeg.exe  
-    - 应用程序所在根目录，如：<应用程序目录>\ffmpeg.exe  
-    - 在应用程序目录下的bin目录，如：<应用程序目录>\bin\ffmpeg.exe  
-    - [Windows]系统变量`Path`下面的所有目录  
-    - [Linux]ffmpeg安装目录，包括：/usr/bin;/usr/local/bin;/usr/share  
-      
-    当以上路径均找不到时，抛出异常。  
-2. 设置ffmpeg工作目录  
-   工作目录默认设置为应用程序根目录，且创建`tmp`目录作为ffmpeg临时文件存放目录  
 
-### 构建FFmpeg执行参数  
-如果进行桌面录制  
-```
-FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
-    .WithDesktopInput()
-    .WithRectangle(new SKRect(0, 0, 1920, 1080))
-    .WithFramerate(60)
-    .WithImageHandle((frameIndex, bitmap) =>
-    {
-        if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))
-        {
-            bitmap.Dispose();
-        }
-    })
-    .WithOutputQuality(OutputQuality.Medium)
-    .Build()
-    //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
-    ;
-```
-上述代码解释：使用输入源为桌面，录制的区域从左上角0,0坐标开始，录制屏幕1920x1080的区域。当图片产生之后，通过WithImageHandle回调，放入frameChannel中。  
-使用其他的输入源，调用对应的API即可，比如：WithCameraInput()。  
+一般情况下，只有Windows系统需要安装FFmpeg 原生库，Linux / macOS 建议使用发行版包管理器或 Homebrew 安装与进程架构一致的共享库及依赖。  
+比如Ubuntu/Debian/Deepin等：  
+```sh
+apt install ffmpeg
 
-### 完整Demo
-以下是录制屏幕的完整demo  
+# dotnet runtime dependencies, Libicu requires installing different versions on different system versions: libicu76 supports Debian 13x, libicu78 supports Ubuntu 26.x
+apt install ca-certificates libc6 libgcc-s1 libgssapi-krb5-2 libicu76 libssl3t64 libstdc++6 tzdata zlib1g
 ```
-using System.Diagnostics;
-using System.Threading.Channels;
-using FFMpegCore;
+
+应用目录内有 FFmpeg 库时，会从同一目录加载，缺库会报错。也可以在第一次执行前显式指定ffmpeg原生库路径：
+
+```csharp
+FFmpegNative.Configure(options =>
+{
+    options.LibraryPath = "/opt/ffmpeg/lib"; // macOS 示例：/opt/homebrew/opt/ffmpeg/lib
+});
+```
+使用 MinGW 构建的第三方包可能还需要 `libstdc++-6.dll` 及其依赖，缺少这些文件时，即使 FFmpeg DLL 已存在也会加载失败。  
+Linux / macOS 自定义目录内的依赖库必须能被系统动态链接器找到。  
+
+另外，如果需要在Linux环境使用SkiaSharp，需要安装包：  
+```sh
+dotnet add package SkiaSharp.NativeAssets.Linux.NoDependencies
+```
+
+## 基本用法
+
+```csharp
 using SkiaSharp;
 using WithSalt.FFmpeg.Recorder;
 using WithSalt.FFmpeg.Recorder.Models;
 
-namespace ConsoleAppDemo
-{
-    internal class Program
+using var cancellation = new CancellationTokenSource();
+
+var recording = new FFmpegArgumentsBuilder()
+    .WithFileInput()
+    .WithFiles("01.mp4", "02.mp4")
+    .WithOutputSize(1280, 720)
+    .WithOutputQuality(OutputQuality.High)
+    .WithImageHandle((frameIndex, bitmap) =>
     {
-        static async Task Main(string[] args)
+        using (bitmap)
         {
-            if (Directory.Exists("output"))
-            {
-                Directory.Delete("output", true);
-            }
-            Directory.CreateDirectory("output");
-
-            //使用默认的ffmpeg加载器
-            FFmpegHelper.SetDefaultFFmpegLoador();
-
-            Channel<(long frameIndex, SKBitmap data)> frameChannel = Channel.CreateBounded<(long frameIndex, SKBitmap data)>(
-                new BoundedChannelOptions(10)
-                {
-                    FullMode = BoundedChannelFullMode.Wait
-                });
-
-            //计算FPS
-            int uiFrameCount = 0;
-            Stopwatch lastUiFpsUpdate = Stopwatch.StartNew();
-            Stopwatch totalUiFpsUpdate = Stopwatch.StartNew();
-            int currentUiFps = 0;
-            long totalUiFps = 0;
-
-            // 启动写入任务
-            var cts = new CancellationTokenSource();
-            var writeTask = Task.Run(async () =>
-            {
-                totalUiFpsUpdate.Restart();
-
-                while (!cts.IsCancellationRequested && await frameChannel.Reader.WaitToReadAsync(cts.Token))
-                {
-                    SKBitmap? latestBitmap = null;
-                    long frameIndex = 0;
-
-                    // 取出所有可用帧，只保留最后一帧
-                    while (frameChannel.Reader.TryRead(out (long frameIndex, SKBitmap bitmap) data))
-                    {
-                        latestBitmap?.Dispose();
-                        latestBitmap = data.bitmap;
-                        frameIndex = data.frameIndex;
-                    }
-
-                    try
-                    {
-                        if (latestBitmap != null)
-                        {
-                            // 更新FPS计数器
-                            uiFrameCount++;
-                            if (lastUiFpsUpdate.ElapsedMilliseconds >= 1000)
-                            {
-                                currentUiFps = uiFrameCount;
-                                totalUiFps += uiFrameCount;
-                                uiFrameCount = 0;
-                                lastUiFpsUpdate.Restart();
-
-                                TimeSpan totalElapsed = totalUiFpsUpdate.Elapsed;
-                                int avgFps = (int)(totalUiFps / Math.Max(1, totalElapsed.TotalSeconds));
-
-                                Console.Write($"\r{(int)totalElapsed.TotalHours:00}:{totalElapsed.Minutes:00}:{totalElapsed.Seconds:00} | Current FPS: {currentUiFps} | AVG FPS: {avgFps}   ");
-                            }
-
-                            //Console.WriteLine("收到图片帧");
-                            SaveBitmapAsImage(latestBitmap, $"output/{frameIndex}.jpg", SKEncodedImageFormat.Jpeg, 100);
-                        }
-                    }
-                    finally
-                    {
-                        latestBitmap?.Dispose();
-                    }
-                }
-            });
-
-            await DesktopTest(frameChannel);
-            Console.WriteLine("Done.");
+            // 同步处理 bitmap，或转交给自己的有界队列。
+            // 交给队列后应由队列消费者 Dispose；入队失败时在这里 Dispose。
         }
+    })
+    .NotifyOnProgress(progress =>
+    {
+        Console.WriteLine($"{progress.FrameIndex}: {progress.MediaTime}");
+    }, TimeSpan.FromSeconds(1));
 
-        private static Action? _cancel = null;
-
-        static async Task DesktopTest(Channel<(long frameIndex, SKBitmap data)> frameChannel)
-        {
-            FFMpegArgumentProcessor ffmpegCmd = new FFmpegArgumentsBuilder()
-                .WithDesktopInput()
-                .WithRectangle(new SKRect(0, 0, 0, 0))
-                .WithFramerate(60)
-                .WithImageHandle((frameIndex, bitmap) =>
-                {
-                    if (!frameChannel.Writer.TryWrite((frameIndex, bitmap)))
-                    {
-                        bitmap.Dispose();
-                    }
-                })
-                .WithOutputQuality(OutputQuality.Medium)
-                .Build()
-                .CancellableThrough(out _cancel)
-                //.NotifyOnProgress(frame => Console.WriteLine($"Frame {frame} captured."), TimeSpan.FromSeconds(1))
-                ;
-
-            var cmd = ffmpegCmd.Arguments;
-            Console.WriteLine($"FFMpeg命令：{Environment.NewLine}ffmpeg {cmd}");
-
-            await ffmpegCmd.ProcessAsynchronously();
-        }
-
-        /// <summary>
-        /// 将 SKBitmap 保存为指定格式的图片文件
-        /// </summary>
-        /// <param name="bitmap">要保存的 SKBitmap 实例</param>
-        /// <param name="filePath">保存的文件路径</param>
-        /// <param name="imageFormat">图像格式（PNG、JPEG 等）</param>
-        /// <param name="quality">编码质量（针对有损格式，如 JPEG）</param>
-        static void SaveBitmapAsImage(SKBitmap bitmap, string filePath, SKEncodedImageFormat imageFormat, int quality)
-        {
-            if (bitmap == null)
-                throw new ArgumentNullException(nameof(bitmap));
-
-            using (SKImage image = SKImage.FromBitmap(bitmap))
-            using (SKData data = image.Encode(imageFormat, quality))
-            using (FileStream stream = File.OpenWrite(filePath))
-            {
-                data.SaveTo(stream);
-            }
-        }
-    }
+try
+{
+    await recording.ProcessAsynchronously(cancellation.Token);
+}
+catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+{
+    // 已结束本次采集并释放原生会话。
 }
 
+// 停止正在运行的采集：cancellation.Cancel();
+// 同步执行：recording.ProcessSynchronously(cancellation.Token);
 ```
 
-### 开发建议
-1. 强烈建议使用异步队列处理图像帧  
-   通常情况下，比如说使用CPU进行图像别，是比较慢的，处理输入远远跟不上ffmpeg获取视频帧的速度。使用异步队列可保证管道畅通，且配合合理丢帧策略，可以让开发的引用程序非常丝滑。可以参考示例项目。  
-2. 随应用程序携带ffmpeg应用程序时，建议放到运行时目录中，支持自动搜索，应用程序目录也不会乱糟糟的  
-   比如：runtimes\win-x64\bin\ffmpeg.exe  
+## 高性能采集
 
-### 更多完整示例  
-[https://github.com/withsalt/BemfaCloud/tree/main/src/Examples](https://github.com/withsalt/WithSalt.FFmpeg.Recorder/tree/main/src/Demos)
+默认 `WithImageHandle` 的独立所有权保持不变。库会复用已释放的原生像素内存，每个会话最多缓存一块空闲缓冲区；仍被调用方或 Skia 共享引用持有的像素不会被覆盖。异步处理应使用有界队列，及时释放消费完成或被丢弃的位图。
 
-## 许可  
-- 本软件使用MIT开源协议。  
-- 本软件使用了 FFmpeg（ https://ffmpeg.org ），FFmpeg 受 LGPL/GPL 许可证保护。  
+完全同步的读取可以改用 `WithImageViewHandle`，接收仅在回调期间有效的只读图像视图，复用位图对象和转换缓冲区；同尺寸、正步长 BGRA 输入直接借用解码帧像素，省去整帧复制：
 
-## 致谢
-感谢这些伟大的开源项目。  
-- FFmpeg https://git.ffmpeg.org/gitweb/ffmpeg.git
-- FFMpegCore https://github.com/rosenbjerg/FFMpegCore
-- SkiaSharp https://github.com/mono/SkiaSharp
-- FlashCap https://github.com/kekyo/FlashCap
+```csharp
+var recording = new FFmpegArgumentsBuilder()
+    .WithDesktopInput()
+    .WithRectangle(SKRect.Create(0, 0, 1920, 1080))
+    .WithFramerate(60)
+    .WithFpsMode(FpsMode.Drop)
+    .WithOutputFramerate(30)
+    .WithDecoderThreads(1)
+    .WithImageViewHandle((index, bitmap) =>
+    {
+        // 在此同步读取像素。bitmap 仅在本次回调内有效。
+        // 禁止 Dispose、修改、保存引用或入队；需要独立所有权时使用 bitmap.Copy()。
+    });
+await recording.ProcessAsynchronously(cancellation.Token);
+```
+
+两种图像回调互相替换，以最后一次配置为准。借用回调、帧筛选回调均在解码线程执行，异常会停止本次采集。
+
+`WithFrameFilter(index => index % 2 == 0)` 在图像分配与转换**之前**筛选输出帧，适合按需采样或由消费者负载决定是否接受下一帧。返回 false 时仍推进帧号和进度，因此图像回调的帧号可能不连续；它不跳过压缩视频解码。未配置图像回调时不执行筛选。
+
+优先降低源采集尺寸/帧率、明确桌面采集区域，避免先捕获整块虚拟桌面再缩小。只需最新画面时使用 `FpsMode.Drop`，缩放成本敏感时选择 `OutputQuality.Low`。`WithDecoderThreads(0)` 由 FFmpeg 自动选择线程，`1` 降低线程/帧缓冲开销；线程更少可能降低压缩视频吞吐，应按实际输入测试。直播低延迟预设仅允许 slice threading，避免新增 frame threading 延迟。
+
+三轮同机微基准中，默认所有权输出的转换路径加速约 3–12 倍、每帧托管分配约 448 → 112 B；借用路径预热后为 0 B。
+
+## 输入配置
+
+以下代码中的配置对象都可继续调用 `WithImageHandle`、`WithOutputSize` 和执行方法：
+
+```csharp
+var rtsp = new FFmpegArgumentsBuilder().WithStreamInput()
+    .WithRtsp("rtsp://host/stream")
+    .WithTcp() // 默认 TCP；也可 WithUdp()
+    .WithTimeout(10)
+    .WithProbeSize(1024 * 1024);
+
+var http = new FFmpegArgumentsBuilder().WithStreamInput()
+    .WithHttp("https://host/playlist.m3u8")
+    .WithTimeout(10);
+
+var rtmp = new FFmpegArgumentsBuilder().WithStreamInput()
+    .WithRtmp("rtmp://host/live/stream")
+    .WithLiveType(RtmpLiveType.Live);
+
+var camera = new FFmpegArgumentsBuilder().WithCameraInput()
+    .WithDeviceName("Camera name") // Linux: /dev/video0；macOS: default、0 或 AVFoundation 名称
+    .WithVideoSize(1280, 720)
+    .WithFramerate(30);
+
+var desktop = new FFmpegArgumentsBuilder().WithDesktopInput()
+    .WithRectangle(SKRect.Create(0, 0, 1280, 720))
+    .WithFramerate(30);
+```
+
+调用 `FFmpegNative.EnumerateCameraDevices()` 可通过 FFmpeg `avdevice_list_input_sources` 原生枚举摄像头，返回的 `Name` 可直接传给 `WithDeviceName`；Windows 使用 DirectShow，Linux 使用 V4L2。
+
+macOS 的 FFmpeg AVFoundation 未实现该枚举 API，`EnumerateCameraDevices()` 会抛出 `NotSupportedException`。直接使用 `WithDeviceName("default")`、视频设备索引（如 `"0"`）或 AVFoundation 名称；库会自动追加 `:none` 禁用音频，传入值不含音频选择器。
+
+桌面输入可以不调用 `WithRectangle`，或使用 `SKRect.Create(0, 0, 0, 0)`，由原生设备自动确定采集范围。Desktop Demo 支持 `0,0`、`0,0,,`、`0,0,0,0`；指定区域使用 `x,y,width,height`，宽高必须同时为正整数。Windows 自动范围覆盖整个虚拟桌面（可能包含多个显示器），`WithOutputSize` 只负责输出缩放，不限制采集区域。只录制某个屏幕或区域时，请明确指定位置和宽高。
+
+macOS 默认采集 AVFoundation 的第一块显示器（`Capture screen 0:none`）。`WithRectangle` 使用该显示器内的非负像素坐标，区域不得超出实际采集尺寸；先裁剪再应用 `WithOutputSize`。自动范围的原点必须为 `(0, 0)`。Retina 显示器请使用采集帧的像素尺寸，而非逻辑点尺寸。
+
+设备名称直接传入，不加命令行引号。设备驱动、FFmpeg 构建启用的协议/解码器、TLS 支持决定具体输入是否可用。
+
+`WithTimeout` 单位为秒，作用于打开、探测以及每次阻塞读取；0 表示不设置期限。取消通过 FFmpeg interrupt callback 中断支持该回调的原生 I/O；不能强制中断用户回调、系统驱动或不响应中断的第三方协议实现。需要等待执行 Task 结束后再处理采集已经停止的状态。
+
+## 输出语义
+
+| 配置 | 行为 |
+| --- | --- |
+| Passthrough | 每个解码帧输出一次，进度使用归一化媒体时间 |
+| VFR | 保留可变帧间隔，丢弃重复/倒退时间戳；不能配置输出帧率 |
+| CFR | 按目标帧率采样，必要时复制上一帧或丢帧；必须配置输出帧率 |
+| Auto | 有输出帧率时使用 CFR，否则使用 VFR |
+| Drop | 只丢帧、不补帧；有输出帧率时限制采样率，否则与 VFR 相同 |
+| WithOutputFramerate | 未指定模式时选择 CFR；显式 Passthrough/VFR 与输出帧率互斥 |
+| OutputQuality.High / Medium / Low | Lanczos / Bilinear / Fast Bilinear 缩放。所有档位均直接转为 BGRA，不进行有损 MJPEG 中转 |
+
+帧率参数必须有限、> 0 且 <= 1000。文件提帧尽快执行，不按墙上时钟播放；CFR 描述媒体时间轴，不保证回调按等间隔实际到达。没有硬件加速或 HDR 色调映射；高位深输入会转换为 8-bit BGRA。
+
+非文件输入默认保留 High 低延迟配置。Medium 使用 nobuffer、discardcorrupt、low_delay 和较小探测窗口；High 进一步减少探测量、启用 direct I/O，并调整 RTSP 缓冲。激进设置可能无法正确识别输入，遇到问题优先使用 `WithLatencyOptimizationLevel(LatencyOptimizationLevel.None)`。显式 `WithProbeSize` 优先于预设值。
+
+`NotifyOnProgress` 返回 `FFmpegProgress`：帧数、跨文件媒体时间、当前输入索引、当前输入媒体时间、当前文件时长（如已知）。直播不提供时长；多文件不预先打开全部文件来计算总百分比。回调按实际时间节流，并在正常结束时补报最后一帧。
+
+## 开发与验证
+
+```sh
+dotnet build src/WithSalt.FFmpeg.Recorder.slnx -c Release
+dotnet run --project tests/WithSalt.FFmpeg.Recorder.Tests -f net8.0 -c Release
+dotnet run --project src/Demos/ConsoleAppDemo -c Release -- --file path/to/video.mp4
+```
+
+测试是可执行的集成测试程序，任一断言失败返回非零退出码，无需 ffmpeg.exe。可用 `-- --native-path <目录>` 测试显式配置；可为 Linux ARM、macOS 发布 self-contained 产物，在没有 SDK 的设备上运行同一测试。LoongArch64 可用 `--self-contained false -p:UseAppHost=false` 发布后，通过目标机器的 `dotnet` 运行 DLL。
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE)，允许使用、复制、修改和分发（包括商业用途），但须保留原始版权声明和许可证声明。
+
+第三方依赖遵循各自的许可证。FFmpeg 原生库由引用方自行选择和安装，其许可证及分发义务取决于所选构建。依赖许可证与相关说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

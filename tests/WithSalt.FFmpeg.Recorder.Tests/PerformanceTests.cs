@@ -47,6 +47,67 @@ internal static unsafe class PerformanceTests
         Check.Equal(first, reused.GetPixel(2, 1));
     }
 
+    internal static void PooledPixelsReserveScalePadding()
+    {
+        using var pool = new PixelBufferPool();
+        foreach (int length in new[] { 8, 16, 24, 32, 56, 64, 112, 128, 256 })
+        {
+            var buffer = pool.Rent(length);
+            try
+            {
+                Check.True(buffer.AllocationLength >= (nuint)length + 64,
+                    "The final packed row needs a full SIMD vector of writable tail padding.");
+                Check.True(((nuint)buffer.Pixels & 63) == 0);
+                new Span<byte>((byte*)buffer.Pixels + length, 64).Fill(0xA5);
+            }
+            finally { buffer.Release(); }
+        }
+    }
+
+    internal static void BorrowedSnapshotPreservesPixelsAndLifetime()
+    {
+        foreach (var format in new[] { AVPixelFormat.AV_PIX_FMT_BGRA, AVPixelFormat.AV_PIX_FMT_YUV420P })
+        {
+            using var source = new SyntheticFrame(7, 4, format);
+            source.Fill(81, 90, 240);
+            if (format == AVPixelFormat.AV_PIX_FMT_BGRA)
+            {
+                byte[] alpha = [0, 1, 17, 64, 127, 254, 255];
+                for (int y = 0; y < 4; y++)
+                for (int x = 0; x < 7; x++)
+                {
+                    byte* pixel = source.Frame->data[0] + y * source.Frame->linesize[0] + x * 4;
+                    pixel[0] = (byte)(x * 31); pixel[1] = (byte)(y * 61); pixel[2] = 237; pixel[3] = alpha[x];
+                }
+            }
+            using var converter = new FrameConverter(Options());
+            var borrowed = converter.ConvertBorrowed(source.Frame);
+            byte[] expected = ReadPackedPixels(borrowed);
+            using var snapshot = borrowed.Resize(borrowed.Info, SKSamplingOptions.Default)
+                ?? throw new Exception("Cannot create an independent snapshot.");
+            Check.Equal(borrowed.Info, snapshot.Info);
+            Check.True(snapshot.GetPixels() != borrowed.GetPixels());
+            Check.True(expected.SequenceEqual(ReadPackedPixels(snapshot)), "Snapshot must preserve all pixel bytes, including alpha.");
+
+            source.Fill(0, 0, 0);
+            converter.ConvertBorrowed(source.Frame);
+            Check.True(!expected.SequenceEqual(ReadPackedPixels(borrowed)), "Test must overwrite the borrowed frame.");
+            converter.Dispose();
+            source.Dispose();
+            Check.True(expected.SequenceEqual(ReadPackedPixels(snapshot)), "Snapshot must survive frame reuse and session disposal.");
+        }
+
+        static byte[] ReadPackedPixels(SKBitmap bitmap)
+        {
+            int rowBytes = bitmap.Width * 4;
+            byte[] pixels = new byte[rowBytes * bitmap.Height];
+            for (int y = 0; y < bitmap.Height; y++)
+                new ReadOnlySpan<byte>((byte*)bitmap.GetPixels() + y * bitmap.RowBytes, rowBytes)
+                    .CopyTo(pixels.AsSpan(y * rowBytes, rowBytes));
+            return pixels;
+        }
+    }
+
     internal static void ConverterMetadataAndFormatChanges()
     {
         using var source = new SyntheticFrame(16, 8, AVPixelFormat.AV_PIX_FMT_YUV444P);

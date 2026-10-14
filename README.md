@@ -100,12 +100,14 @@ var recording = new FFmpegArgumentsBuilder()
     .WithImageViewHandle((index, bitmap) =>
     {
         // 在此同步读取像素。bitmap 仅在本次回调内有效。
-        // 禁止 Dispose、修改、保存引用或入队；需要独立所有权时使用 bitmap.Copy()。
+        // 禁止 Dispose、修改、保存引用或入队；需要独立所有权时改用 WithImageHandle。
     });
 await recording.ProcessAsynchronously(cancellation.Token);
 ```
 
 两种图像回调互相替换，以最后一次配置为准。借用回调、帧筛选回调均在解码线程执行，异常会停止本次采集。
+
+需要异步处理或保留图像时，优先使用 `WithImageHandle` 接收独立位图。如果必须在借用回调内复制，可使用保持原尺寸和格式的 `bitmap.Resize(bitmap.Info, SKSamplingOptions.Default)`，检查结果非空，并由最终消费者释放副本。已验证 SkiaSharp 3.119.0 和 4.153.1 的 `Copy()` / `CopyTo()` 存在临时 shader 延迟释放问题，即使释放副本也会造成逐帧内存增长，详见[上游 #2915](https://github.com/mono/SkiaSharp/issues/2915)和[本项目验证记录](docs/memory-growth-review-2026-10-14.md)。
 
 `WithFrameFilter(index => index % 2 == 0)` 在图像分配与转换**之前**筛选输出帧，适合按需采样或由消费者负载决定是否接受下一帧。返回 false 时仍推进帧号和进度，因此图像回调的帧号可能不连续；它不跳过压缩视频解码。未配置图像回调时不执行筛选。
 

@@ -82,7 +82,10 @@ public interface IFFmpegArgumentsBuilder
     /// </para>
     /// <para>
     /// 需要异步处理或保留图像时，优先使用 <see cref="WithImageHandle"/>。
-    /// 也可以在当前回调内调用 <c>bitmap.Copy()</c> 创建独立副本，由调用方负责释放副本；逐帧复制会抵消主要复用收益。
+    /// 若必须复制视图，可在当前回调内调用 <c>bitmap.Resize(bitmap.Info, SKSamplingOptions.Default)</c>，
+    /// 检查结果非空，并由最终消费者释放副本；逐帧复制会抵消主要复用收益。
+    /// SkiaSharp 3.119.0 / 4.153.1 的 <c>Copy()</c> / <c>CopyTo()</c> 存在临时 shader 延迟释放问题，
+    /// 即使释放副本也会导致内存增长，参见 https://github.com/mono/SkiaSharp/issues/2915。
     /// </para>
     /// <para>
     /// 同尺寸、正步长 BGRA 输入可直接查看解码帧像素，省去整帧复制；其他格式或缩放仍需像素转换。

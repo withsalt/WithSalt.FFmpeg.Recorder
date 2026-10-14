@@ -101,12 +101,14 @@ var recording = new FFmpegArgumentsBuilder()
     .WithImageViewHandle((index, bitmap) =>
     {
         // Read synchronously here. The bitmap is valid only during this callback.
-        // Do not dispose, modify, retain or queue it. Use bitmap.Copy() for ownership.
+        // Do not dispose, modify, retain or queue it. Use WithImageHandle for ownership.
     });
 await recording.ProcessAsynchronously(cancellation.Token);
 ```
 
 The two image callbacks replace each other; the last configuration takes effect. Borrowed callbacks and frame filters run on the decoding thread; exceptions stop the session.
+
+For asynchronous processing or retaining images, prefer `WithImageHandle` to receive independently owned bitmaps. If you must copy inside a borrowed callback, use `bitmap.Resize(bitmap.Info, SKSamplingOptions.Default)` to preserve dimensions and format, check for a null result, and have the final consumer dispose the copy. SkiaSharp 3.119.0 and 4.153.1 were verified to delay disposal of a temporary shader in `Copy()` / `CopyTo()`, allowing memory to grow per frame even when each copy is disposed. See [upstream #2915](https://github.com/mono/SkiaSharp/issues/2915) and [this project's validation record](docs/memory-growth-review-2026-10-14.md).
 
 `WithFrameFilter(index => index % 2 == 0)` filters output frames **before** image allocation and conversion, allowing on-demand sampling or deciding whether to accept the next frame based on consumer load. Returning false still advances frame indexes and progress, so indexes delivered to image callbacks may have gaps. Filtering does not skip compressed-video decoding and is not invoked without an image callback.
 

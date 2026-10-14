@@ -186,6 +186,8 @@ await Test("Configuration freezes after initialization", () => Sync(() =>
     Check.Throws<InvalidOperationException>(() => FFmpegNative.Configure(_ => { }))));
 
 await Test("BGRA padded/negative strides and copy/view ownership", () => Sync(PerformanceTests.BgraStridesAndOwnership));
+await Test("Pooled pixels reserve a full SIMD tail beyond the payload", () => Sync(PerformanceTests.PooledPixelsReserveScalePadding));
+await Test("Borrowed snapshots preserve pixels, alpha and independent lifetime", () => Sync(PerformanceTests.BorrowedSnapshotPreservesPixelsAndLifetime));
 await Test("Reusable conversion invalidates size, format, range and matrix", () => Sync(PerformanceTests.ConverterMetadataAndFormatChanges));
 await Test("Pooled pixels respect shared Skia references and cross-thread release", () => Sync(PerformanceTests.PooledPixelsRespectSkiaReferences));
 await Test("Pooled pixels remain independent during concurrent conversion and release", () => Sync(PerformanceTests.PooledPixelsAcrossProducerAndConsumer));

@@ -49,9 +49,13 @@ internal sealed unsafe class PixelBufferPool : IDisposable
 
     internal sealed class PixelBuffer
     {
+        // swscale SIMD converters can write a complete vector past the final
+        // packed row. Reserve it explicitly; rounding the payload alone is insufficient.
+        internal const int TailPadding = 64;
         private readonly PixelBufferPool _pool;
         private int _leased;
         internal int Length { get; }
+        internal nuint AllocationLength { get; }
         internal nint Pixels { get; private set; }
         internal SKBitmapReleaseDelegate ReleaseCallback { get; }
 
@@ -62,7 +66,8 @@ internal sealed unsafe class PixelBufferPool : IDisposable
             // Passing a reusable delegate without a context avoids SkiaSharp's
             // per-install closure allocation. The native GCHandle roots this lease.
             ReleaseCallback = (_, _) => Release();
-            Pixels = (nint)NativeMemory.AlignedAlloc(((nuint)length + 63) & ~(nuint)63, 64);
+            AllocationLength = ((nuint)length + TailPadding + 63) & ~(nuint)63;
+            Pixels = (nint)NativeMemory.AlignedAlloc(AllocationLength, 64);
             if (Pixels == nint.Zero) throw new OutOfMemoryException("Cannot allocate output pixels.");
         }
 

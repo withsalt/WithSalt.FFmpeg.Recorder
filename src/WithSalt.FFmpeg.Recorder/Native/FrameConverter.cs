@@ -49,16 +49,24 @@ internal sealed unsafe class FrameConverter : IDisposable
     {
         var info = GetInfo(frame);
         var bitmap = new SKBitmap();
-        PixelBufferPool.PixelBuffer? buffer = null;
         try
         {
-            buffer = (_pixelPool ??= new PixelBufferPool()).Rent(checked(info.Width * info.Height * 4));
-            if (!bitmap.InstallPixels(info, buffer.Pixels, info.RowBytes, buffer.ReleaseCallback))
-                throw new InvalidOperationException("Cannot install output pixels.");
+            InstallPooledPixels(bitmap, info);
             ConvertInto(frame, bitmap, info);
             return bitmap;
         }
-        catch { bitmap.Dispose(); buffer?.Release(); throw; }
+        catch { bitmap.Dispose(); throw; }
+    }
+
+    private void InstallPooledPixels(SKBitmap bitmap, SKImageInfo info)
+    {
+        var buffer = (_pixelPool ??= new PixelBufferPool()).Rent(checked(info.Width * info.Height * 4));
+        try
+        {
+            if (!bitmap.InstallPixels(info, buffer.Pixels, info.RowBytes, buffer.ReleaseCallback))
+                throw new InvalidOperationException("Cannot install output pixels.");
+        }
+        catch { buffer.Release(); throw; }
     }
 
     internal SKBitmap ConvertBorrowed(AVFrame* frame)
@@ -85,8 +93,8 @@ internal sealed unsafe class FrameConverter : IDisposable
             if (_borrowedIsView || _borrowedPixels == nint.Zero
                 || _borrowedWidth != info.Width || _borrowedHeight != info.Height)
             {
-                if (!_borrowed.TryAllocPixels(info, SKBitmapAllocFlags.None))
-                    throw new OutOfMemoryException("Cannot allocate reusable output bitmap.");
+                // Skia's tightly allocated pixels do not include swscale's SIMD tail padding.
+                InstallPooledPixels(_borrowed, info);
             }
             _borrowedIsView = false;
             ConvertInto(frame, _borrowed, info);
